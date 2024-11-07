@@ -1,0 +1,1 @@
+import{d as e,r as a,_ as o}from"./index-C5oIhCp2.js";const s=e({__name:"LayoutGuest",setup(r){return(t,_)=>a(t.$slots,"default",{},void 0,!0)}}),u=o(s,[["__scopeId","data-v-0c73aa06"]]);export{u as default};

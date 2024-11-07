@@ -1,0 +1,1 @@
+import{d as a,x as s,w as n,L as r,o as c,r as p,_ as d}from"./index-C5oIhCp2.js";const _=a({__name:"ComponentCard",props:{tag:{default:"section"}},setup(o){const e=o;return(t,l)=>(c(),s(r(e.tag),{class:"card"},{default:n(()=>[p(t.$slots,"default",{},void 0,!0)]),_:3}))}}),C=d(_,[["__scopeId","data-v-0c6bdb5b"]]);export{C};
