@@ -82,8 +82,9 @@ install_asterisk() {
         "kernel-devel"
         "sqlite-devel"
         "libuuid-devel"
-        "jansson-devel"
-        "libsrtp-devel"
+        "jansson"
+        "libsrtp"
+        "libedit-devel"
     )
 
     install_packages "${PACKAGES[@]}"
@@ -94,11 +95,17 @@ install_asterisk() {
 
     wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-current.tar.gz
 
-    tar -xzvf asterisk-22-current.tar.gz
+    tar -xvf asterisk-22-current.tar.gz
 
     cd asterisk-22.* || exit
 
-    ./configure
+    contrib/scripts/install_prereq install
+
+    ./configure --with-jansson-bundled
+
+    make menuselect
+
+    ESC
 
     make
 
@@ -133,7 +140,7 @@ install_asterisk() {
     echo ""
     echo "*------------------------------------------------------*"
 
-    sed -i 's/^;enabled = yes/enabled = yes/' "$ASTERISK_DIR/manager.conf"
+    sed -i 's/^;enabled = no/enabled = yes/' "$ASTERISK_DIR/manager.conf"
 
     # Добавление AMI пользователя
     cat <<EOL >>"$ASTERISK_DIR/manager.conf"
@@ -224,6 +231,9 @@ EOL
     else
         echo "Ошибка в конфигурации apache. Пожалуйста, проверьте файл /etc/httpd/conf.d/frontend.conf"
     fi
+
+    sudo firewall-cmd --permanent --add-service=http
+    sudo firewall-cmd --reload
 }
 
 configure_nginx() {
@@ -267,6 +277,9 @@ EOL
     else
         echo "Ошибка в конфигурации nginx. Пожалуйста, проверьте файл /etc/nginx/conf.d/frontend.conf"
     fi
+
+    sudo firewall-cmd --permanent --add-service=http
+    sudo firewall-cmd --reload
 }
 
 configure_backend_service() {
@@ -427,7 +440,11 @@ main() {
 
     case "$RESPONSE" in
     "Да" | "да" | "д")
-        install_packages "postgresql16-server"
+        yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+        yum -qy module disable postgresql
+
+        yum install -y postgresql16-server postgresql16
 
         echo "Произвести первоначальную настройку Postgresql (да / нет)? (рекомендуется):"
         read -r RESPONSE
@@ -455,11 +472,17 @@ main() {
     case "$RESPONSE" in
     "Да" | "да" | "д")
         echo "Установка набора инструментов для обработки мультимедийных данных..."
-        local PACKAGES=(
-            "ffmpeg"
-            "ffmpeg-devel"
-        )
-        install_packages "${PACKAGES[@]}"
+        wget https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+
+        tar -xvf ffmpeg-7.1.tar.xz
+
+        cd ffmpeg-7.1
+
+        ./configure --disable-x86asm
+
+        make
+
+        sudo make install
         ;;
     *)
         echo "Будет произведена компиляция бэкенд-сервиса с отключенным видео-контроллером"
@@ -481,6 +504,9 @@ main() {
         echo "Запустите миграции из директории /opt/oper.reag/backend/migrations/"
         ;;
     esac
+
+    configure_backend_service
+    configure_backend_ami_service
 
     echo "Перезагрузка systemd для применения изменений..."
     systemctl daemon-reload
