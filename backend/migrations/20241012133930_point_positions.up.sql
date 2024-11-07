@@ -1,0 +1,11 @@
+-- Create PointPosition table
+CREATE TABLE
+    IF NOT EXISTS point_positions (
+        id BIGSERIAL PRIMARY KEY,
+        a DOUBLE PRECISION NOT NULL,
+        d DOUBLE PRECISION NOT NULL,
+        l DOUBLE PRECISION NOT NULL,
+        r DOUBLE PRECISION NOT NULL,
+        x DOUBLE PRECISION NOT NULL,
+        y DOUBLE PRECISION NOT NULL
+    );
