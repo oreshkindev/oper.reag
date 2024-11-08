@@ -3,7 +3,7 @@
 print() {
     local header="$1"
 
-    echo -e "$header\n"
+    echo -e "\n$header\n"
 }
 
 #
