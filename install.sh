@@ -14,7 +14,7 @@ PASS_AMI=$(openssl rand -base64 12)
 
 PASS_POSTGRES=$(openssl rand -base64 12)
 
-PATH="/opt/oper.reag"
+OAWJHO="/opt/oper.reag"
 
 HOST=$(hostname -I | awk '{print $1}')
 
@@ -74,7 +74,7 @@ configure_apache() {
     echo ""
     touch /etc/httpd/conf.d/frontend.conf
 
-    cat $PATH/tmp/etc/httpd/conf.d/frontend.conf >/etc/httpd/conf.d/frontend.conf
+    cat $OAWJHO/tmp/etc/httpd/conf.d/frontend.conf >/etc/httpd/conf.d/frontend.conf
 
     echo "Проверка конфигурации apache на наличие ошибок..."
     echo ""
@@ -111,7 +111,7 @@ configure_nginx() {
     echo ""
     touch /etc/nginx/conf.d/frontend.conf
 
-    cat $PATH/tmp/etc/nginx/conf.d/frontend.conf >/etc/nginx/conf.d/frontend.conf
+    cat $OAWJHO/tmp/etc/nginx/conf.d/frontend.conf >/etc/nginx/conf.d/frontend.conf
 
     echo "Проверка конфигурации nginx на наличие ошибок..."
     echo ""
@@ -158,11 +158,11 @@ configure_backend_service() {
     systemctl enable backend.service --now
 
     if [ "$HTTP" = "nginx" ]; then
-        PROXY=$(cat "$PATH/tmp/etc/nginx/conf.d/proxy_backend.conf")
+        PROXY=$(cat "$OAWJHO/tmp/etc/nginx/conf.d/proxy_backend.conf")
         sed -i "/}/i $PROXY" "/etc/nginx/conf.d/frontend.conf"
 
     elif [ "$HTTP" = "apache" ]; then
-        PROXY=$(cat "$PATH/tmp/etc/httpd/conf.d/proxy_backend.conf")
+        PROXY=$(cat "$OAWJHO/tmp/etc/httpd/conf.d/proxy_backend.conf")
         sed -i "/<\/VirtualHost>/i $PROXY" "/etc/httpd/conf.d/frontend.conf"
     else
         echo ""
@@ -249,7 +249,7 @@ main() {
         ;;
     *)
         echo ""
-        echo "Настройте веб сервер на свое усмотрение. Скомпилированные исходники будут расположены в $PATH/frontend/"
+        echo "Настройте веб сервер на свое усмотрение. Скомпилированные исходники будут расположены в $OAWJHO/frontend/"
         ;;
     esac
 
