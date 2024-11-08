@@ -159,11 +159,11 @@ configure_backend_service() {
 
     if [ "$HTTP" = "nginx" ]; then
         PROXY=$(cat "$SOURCE_PATH/tmp/etc/nginx/conf.d/proxy_backend.conf")
-        sed -i "/}/i $PROXY" "/etc/nginx/conf.d/frontend.conf"
+        printf '%s\n' "$PROXY" | sed -i "/}/r /dev/stdin" "/etc/nginx/conf.d/frontend.conf"
 
     elif [ "$HTTP" = "apache" ]; then
         PROXY=$(cat "$SOURCE_PATH/tmp/etc/httpd/conf.d/proxy_backend.conf")
-        sed -i "/<\/VirtualHost>/i $PROXY" "/etc/httpd/conf.d/frontend.conf"
+        printf '%s\n' "$PROXY" | sed -i "/<\/VirtualHost>/r /dev/stdin" "/etc/httpd/conf.d/frontend.conf"
     else
         echo ""
         echo "Веб сервер неопределен..."
