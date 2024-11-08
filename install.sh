@@ -1,97 +1,104 @@
 #!/usr/bin/env bash
 
-# Проверка, запущен ли скрипт от имени root
+print() {
+    local header="$1"
+
+    echo -e "$header\n"
+}
+
+#
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Необходимы права root для запуска сценария."
+    print "Необходимы права root для запуска сценария."
     exit 1
 fi
 
-# Определение операционной системы и пакетного менеджера
+#
 if [ -f /etc/redhat-release ]; then
-    echo "Обнаружена система на базе Red Hat..."
+    print "Система на базе RED HAT..."
 else
-    echo "Неподдерживаемая операционная система."
+    print "Неподдерживаемая операционная система."
     exit 1
 fi
 
-# Глобальные переменные
+#
+#
 AMI_PASSWORD=""
+#
 #
 POSTGRESQL_PASSWORD=""
 #
+#
 IP=$(hostname -I | awk '{print $1}')
+#
+#
+SOURCE_FOLDER="/opt/oper.reag"
 
 install_packages() {
-
     local PACKAGES=("$@")
+    #
     #
     local SPELL=false
 
     for P in "${PACKAGES[@]}"; do
         if ! rpm -q "$P" >/dev/null 2>&1; then
             if [ "$SPELL" = false ]; then
-                echo ""
-                echo -n "Установить $P? (да / * (для всех) или (нет): "
+                print -n "Установить $P? (да / * (для всех) или (нет): "
                 read -r R
             fi
 
             if [ "$R" = "Да" ] || [ "$R" = "да" ] || [ "$R" = "д" ] || [ "$SPELL" = true ]; then
-                echo "Устанавливаем $P..."
-                echo ""
+                print "Устанавливаем $P..."
+
                 yum install -y "$P"
+
                 if [ $? -ne 0 ]; then
-                    echo ""
-                    echo "Не удалось установить $P. Проверьте подключение к интернету и повторите попытку."
+                    print "Не удалось установить $P. Проверьте подключение к интернету и повторите попытку."
                     exit 1
                 fi
             elif [ "$R" = "*" ]; then
                 SPELL=true
-                echo ""
-                echo "Устанавливаем $P..."
+
+                print "Устанавливаем $P..."
+
                 yum install -y "$P"
+
                 if [ $? -ne 0 ]; then
-                    echo ""
-                    echo "Не удалось установить $P. Проверьте подключение к интернету и повторите попытку."
+                    print "Не удалось установить $P. Проверьте подключение к интернету и повторите попытку."
                     exit 1
                 fi
             else
-                echo ""
-                echo "$P пропущен."
+                print "$P пропущен."
             fi
         else
-            echo ""
-            echo "$P уже установлен."
+            print "$P уже установлен."
         fi
     done
 }
 
 install_migrations() {
+    print "Выполнение миграции..."
 
-    echo "Установка миграций..."
-    echo ""
-    for migration in /opt/oper.reag/backend/migrations/*.sql; do
-        echo "Выполнение миграции $migration..."
-        echo ""
-        sudo -u postgres psql -d postgres -f "$migration"
+    for M in $SOURCE_FOLDER/backend/migrations/*.sql; do
+        print "Выполнение миграции $M..."
+
+        sudo -u postgres psql -d postgres -f "$M"
+
         if [ $? -ne 0 ]; then
-            echo "Ошибка при выполнении миграции $migration."
+            print "Ошибка при выполнении миграции $M."
             exit 1
         fi
     done
 }
 
 install_postgresql() {
-    echo "Подготовка postgresql16..."
-    echo ""
+    print "Подготовка postgresql16..."
 
     install_packages "https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
 
-    echo "Отключение стандартного модуля..."
-    echo ""
+    print "Отключение стандартного модуля..."
     yum -qy module disable postgresql
 
-    echo "Установка postgresql16..."
-    echo ""
+    print "Установка postgresql16..."
 
     local PACKAGES=(
         "postgresql16-server"
@@ -100,86 +107,66 @@ install_postgresql() {
 
     install_packages "${PACKAGES[@]}"
 
-    echo "postgresql16 установлен."
-    echo ""
+    print "postgresql16 установлен."
 }
 
 configure_postgresql() {
 
-    echo "Настройка конфигурации postgresql-16..."
-    echo ""
+    print "Настройка конфигурации postgresql-16..."
 
-    echo "Инициализируем базу данных..."
-    echo ""
+    print "Инициализируем базу данных..."
     postgresql-16-setup initdb
 
-    echo "Добавляем сервис postgresql-16 в автозапуск..."
-    echo ""
+    print "Добавляем сервис postgresql-16 в автозапуск..."
     systemctl enable postgresql-16.service --now
 
-    echo "Открываем все адреса для прослушивания..."
-    echo ""
+    print "Открываем все адреса для прослушивания..."
     sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" /var/lib/pgsql/16/data/postgresql.conf
 
     echo "host    all             all             127.0.0.1/32            md5" >>/var/lib/pgsql/16/data/pg_hba.conf
 
-    echo "Генерируем новый пароль для пользователя postgres..."
-    echo ""
+    print "Генерируем новый пароль для пользователя postgres..."
     POSTGRESQL_PASSWORD=$(openssl rand -base64 12)
 
-    echo "Устанавливаем новый пароль для пользователя postgres..."
-    echo ""
+    print "Устанавливаем новый пароль для пользователя postgres..."
     sudo -u postgres psql -c "ALTER USER postgres WITH ENCRYPTED PASSWORD '$POSTGRESQL_PASSWORD';"
 
-    echo "*------------------------------------------------------*"
-    echo ""
-    echo "Пароль пользователя postgres: $POSTGRESQL_PASSWORD"
-    echo ""
-    echo "*------------------------------------------------------*"
+    print "*------------------------------------------------------*"
+    print "Пароль пользователя postgres: $POSTGRESQL_PASSWORD"
+    print "*------------------------------------------------------*"
 
-    echo "Обновляем пароль в окружении бэкенда"
-    echo ""
-    sed -i "s|export DATABASE_URL=.*|export DATABASE_URL=\"postgres://postgres:$POSTGRESQL_PASSWORD@localhost:5432/postgres?sslmode=disable\"|" /opt/oper.reag/backend/env.sh
+    print "Обновляем пароль в окружении бэкенда"
+    sed -i "s|export DATABASE_URL=.*|export DATABASE_URL=\"postgres://postgres:$POSTGRESQL_PASSWORD@localhost:5432/postgres?sslmode=disable\"|" $SOURCE_FOLDER/backend/env.sh
 
-    echo "Открываем порт 5432 для внешнего доступа..."
-    echo ""
+    print "Открываем порт 5432 для внешнего доступа..."
     sudo firewall-cmd --permanent --add-port=5432/tcp
     sudo firewall-cmd --reload
 
-    echo "Перезапуск службы postgresql-16..."
-    echo ""
+    print "Перезапуск службы postgresql-16..."
     systemctl restart postgresql-16.service
 }
 
 configure_apache() {
 
-    echo "Настройка конфигурации apache..."
-    echo ""
+    print "Настройка конфигурации apache..."
     touch /etc/httpd/conf.d/frontend.conf
 
-    cat /opt/oper.reag/tmp/etc/httpd/conf.d/frontend.conf >/etc/httpd/conf.d/frontend.conf
+    cat $SOURCE_FOLDER/tmp/etc/httpd/conf.d/frontend.conf >/etc/httpd/conf.d/frontend.conf
 
-    echo "Проверка конфигурации apache на наличие ошибок..."
-    echo ""
+    print "Проверка конфигурации apache на наличие ошибок..."
     apachectl configtest
 
     if [ $? -eq 0 ]; then
-        echo "Конфигурация apache корректна. Перезапуск apache..."
-        echo ""
+        print "Конфигурация apache корректна. Перезапуск apache..."
         systemctl restart httpd
     else
-        echo "Ошибка в конфигурации apache. Пожалуйста, проверьте файл /etc/httpd/conf.d/frontend.conf"
-        echo ""
+        print "Ошибка в конфигурации apache. Пожалуйста, проверьте файл /etc/httpd/conf.d/frontend.conf"
     fi
 
-    echo "Веб-сервер успешно настроен."
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
-    echo "Интерфейс доступен по адресу: http://$IP/"
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
+    print "Веб-сервер успешно настроен."
+    print "*------------------------------------------------------*"
+    print "Интерфейс доступен по адресу: http://$IP/"
+    print "*------------------------------------------------------*"
 
     sudo firewall-cmd --permanent --add-service=http
     sudo firewall-cmd --reload
@@ -187,92 +174,74 @@ configure_apache() {
 
 configure_nginx() {
 
-    echo "Настройка конфигурации nginx..."
-    echo ""
+    print "Настройка конфигурации nginx..."
 
-    echo "Создание файла конфигурации frontend.conf"
-    echo ""
+    print "Создание файла конфигурации frontend.conf"
     touch /etc/nginx/conf.d/frontend.conf
 
-    cat /opt/oper.reag/tmp/etc/nginx/conf.d/frontend.conf >/etc/nginx/conf.d/frontend.conf
+    cat $SOURCE_FOLDER/tmp/etc/nginx/conf.d/frontend.conf >/etc/nginx/conf.d/frontend.conf
 
-    echo "Проверка конфигурации nginx на наличие ошибок..."
-    echo ""
+    print "Проверка конфигурации nginx на наличие ошибок..."
     nginx -t
 
     if [ $? -eq 0 ]; then
-        echo "Конфигурация nginx корректна. Перезапуск nginx..."
-        echo ""
+        print "Конфигурация nginx корректна. Перезапуск nginx..."
         systemctl restart nginx
     else
-        echo "Ошибка в конфигурации nginx. Пожалуйста, проверьте файл /etc/nginx/conf.d/frontend.conf"
-        echo ""
+        print "Ошибка в конфигурации nginx. Пожалуйста, проверьте файл /etc/nginx/conf.d/frontend.conf"
     fi
 
-    echo "Веб-сервер успешно настроен."
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
-    echo "Интерфейс доступен по адресу: http://$IP/"
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
+    print "Веб-сервер успешно настроен."
+    print "*------------------------------------------------------*"
+    print "Интерфейс доступен по адресу: http://$IP/"
+    print "*------------------------------------------------------*"
 
     sudo firewall-cmd --permanent --add-service=http
     sudo firewall-cmd --reload
 }
 
 configure_backend_service() {
-    echo "Создание службы backend.service..."
-    echo ""
+    print "Создание службы backend.service..."
     touch /etc/systemd/system/backend.service
 
-    cat /opt/oper.reag/tmp/etc/systemd/system/backend.service >/etc/systemd/system/backend.service
+    cat $SOURCE_FOLDER/tmp/etc/systemd/system/backend.service >/etc/systemd/system/backend.service
 
-    chmod +x /opt/oper.reag/backend/env.sh
-    chmod +x /opt/oper.reag/backend/bin/backend
+    chmod +x $SOURCE_FOLDER/backend/env.sh
+    chmod +x $SOURCE_FOLDER/backend/bin/backend
 
-    echo "Перезагрузка systemd для применения изменений..."
-    echo ""
+    print "Перезагрузка systemd для применения изменений..."
     systemctl daemon-reload
 
-    echo "Включение и запуск службы backend.service..."
-    echo ""
+    print "Включение и запуск службы backend.service..."
     systemctl enable backend.service --now
 
-    echo "Служба backend.service успешно создана и запущена."
-    echo ""
+    print "Служба backend.service успешно создана и запущена."
 }
 
 configure_backend_ami_service() {
 
-    echo "Создание службы backend-ami.service..."
-    echo ""
+    print "Создание службы backend-ami.service..."
     touch /etc/systemd/system/backend-ami.service
 
-    cat /opt/oper.reag/tmp/etc/systemd/system/backend-ami.service >/etc/systemd/system/backend-ami.service
+    cat $SOURCE_FOLDER/tmp/etc/systemd/system/backend-ami.service >/etc/systemd/system/backend-ami.service
 
-    chmod +x /opt/oper.reag/backend-ami/env.sh
-    chmod +x /opt/oper.reag/backend-ami/bin/backend-ami
+    chmod +x $SOURCE_FOLDER/backend-ami/env.sh
+    chmod +x $SOURCE_FOLDER/backend-ami/bin/backend-ami
 
-    echo "Перезагрузка systemd для применения изменений..."
-    echo ""
+    print "Перезагрузка systemd для применения изменений..."
     systemctl daemon-reload
 
-    echo "Включение и запуск службы backend-ami.service..."
-    echo ""
+    print "Включение и запуск службы backend-ami.service..."
     systemctl enable backend-ami.service --now
 
-    echo "Служба backend-ami.service успешно создана и запущена."
-    echo ""
+    print "Служба backend-ami.service успешно создана и запущена."
 }
 
 install_asterisk() {
 
     cd
 
-    echo "Проверка и установка зависимостей для Asterisk..."
-    echo ""
+    print "Проверка и установка зависимостей для Asterisk..."
 
     local PACKAGES=(
         "epel-release"
@@ -282,30 +251,23 @@ install_asterisk() {
 
     install_packages "${PACKAGES[@]}"
 
-    echo "Установка Asterisk..."
-    echo ""
+    print "Установка Asterisk..."
 
-    echo "Скачивание исходников..."
-    echo ""
+    print "Скачивание исходников..."
     wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-current.tar.gz
 
-    echo "Распаковка архива..."
-    echo ""
+    print "Распаковка архива..."
     tar zxvf asterisk-22-current.tar.gz
 
-    echo "Удаление архива..."
-    echo ""
+    print "Удаление архива..."
     rm -rf asterisk-22-current.tar.gz
 
     cd asterisk-22*/
 
-    echo "Установка необходимых зависимостей..."
-    echo ""
+    print "Установка необходимых зависимостей..."
     contrib/scripts/install_prereq install
 
-    echo ""
-    echo "Настройка системы..."
-    echo ""
+    print "Настройка системы..."
     ./configure --libdir=/usr/lib64 --with-pjproject-bundled --with-jansson-bundled
 
     make
@@ -320,17 +282,13 @@ install_asterisk() {
 
     make basic-pbx
 
-    echo ""
-    echo "Создание системной службы..."
-    echo ""
+    print "Создание системной службы..."
     touch /usr/lib/systemd/system/asterisk.service
 
-    echo "Добавляем содержимое..."
-    echo ""
-    cat /opt/oper.reag/tmp/etc/systemd/system/asterisk.service >/usr/lib/systemd/system/asterisk.service
+    print "Добавляем содержимое..."
+    cat $SOURCE_FOLDER/tmp/etc/systemd/system/asterisk.service >/usr/lib/systemd/system/asterisk.service
 
-    echo "Конфигурация Asterisk.Создание пользовательских конфигурационных файлов..."
-    echo ""
+    print "Конфигурация Asterisk.Создание пользовательских конфигурационных файлов..."
 
     DIR="/etc/asterisk"
 
@@ -342,41 +300,33 @@ install_asterisk() {
 
     echo "#include extensions_custom.conf" >>"$DIR/extensions.conf"
 
-    echo "Генерация пароля для AMI пользователя"
-    echo ""
+    print "Генерация пароля для AMI пользователя"
 
     AMI_PASSWORD=$(openssl rand -base64 16)
 
-    echo "*------------------------------------------------------*"
-    echo ""
-    echo "Пароль пользователя AMI: $AMI_PASSWORD"
-    echo ""
-    echo "*------------------------------------------------------*"
+    print "*------------------------------------------------------*"
+    print "Пароль пользователя AMI: $AMI_PASSWORD"
+    print "*------------------------------------------------------*"
 
     sed -i 's/^;enabled = no/enabled = yes/' "$DIR/manager.conf"
 
-    echo ""
-    echo "Добавление AMI пользователя"
-    cat /opt/oper.reag/tmp/asterisk/manager.conf >$DIR/manager.conf
+    print "Добавление AMI пользователя"
+    cat $SOURCE_FOLDER/tmp/asterisk/manager.conf >$DIR/manager.conf
 
     sed -i 's/^secret = secret/secret = '$AMI_PASSWORD'/' "$DIR/manager.conf"
 
-    echo ""
-    echo "Конфигурация AMI добавлена в manager.conf."
-    echo ""
+    print "Конфигурация AMI добавлена в manager.conf."
 
-    echo "Обновляем пароль в окружении AMI сервиса"
-    echo ""
-    sed -i "s|export SECRET=.*|export SECRET=\"$AMI_PASSWORD\"|" /opt/oper.reag/backend-ami/env.sh
+    print "Обновляем пароль в окружении AMI сервиса"
+    sed -i "s|export SECRET=.*|export SECRET=\"$AMI_PASSWORD\"|" $SOURCE_FOLDER/backend-ami/env.sh
 
-    echo "Asterisk установлен. Запускаю службы..."
-    echo ""
+    print "Asterisk установлен. Запускаю службы..."
 
     systemctl enable asterisk.service
 
     systemctl start asterisk
 
-    echo "Конфигурация Asterisk завершена."
+    print "Конфигурация Asterisk завершена."
 }
 
 # Основная логика
@@ -384,8 +334,7 @@ main() {
 
     #
     #
-    echo ""
-    echo "Обновить систему перед установкой необходимых компонентов (да / нет)? (рекомендуется):"
+    print "Обновить системные компоненты перед установкой (да / нет)? (рекомендуется):"
     read -r R
 
     case "$R" in
@@ -393,27 +342,23 @@ main() {
         yum check-update
         ;;
     *)
-        echo ""
-        echo "Продолжаем без обновления компонентов..."
+        print "Продолжаем без обновления системных компонентов..."
         ;;
     esac
 
     #
     #
-    echo ""
-    echo "Необходимо установить веб-сервер (да / нет)? (рекомендуется):"
+    print "Установить веб-сервер (да / нет)? (рекомендуется):"
     read -r R
     case "$R" in
     "Да" | "да" | "д")
-        echo ""
-        echo "Какой веб-сервер установить (apache / nginx)?:"
+        print "Какой веб-сервер установить (apache / nginx)?:"
         read -r R
         case "$R" in
         "apache" | "a")
             install_packages "httpd"
 
-            echo ""
-            echo "Произвести первоначальную настройку apache (да / нет)? (рекомендуется):"
+            print "Произвести первоначальную настройку apache (да / нет)? (рекомендуется):"
             read -r R
 
             case "$R" in
@@ -421,16 +366,14 @@ main() {
                 configure_apache
                 ;;
             *)
-                echo ""
-                echo "После установки произведите настройку apache"
+                print "После установки произведите настройку apache"
                 ;;
             esac
             ;;
         "nginx" | "n")
             install_packages "nginx"
 
-            echo ""
-            echo "Произвести первоначальную настройку nginx (да / нет)? (рекомендуется):"
+            print "Произвести первоначальную настройку nginx (да / нет)? (рекомендуется):"
             read -r R
 
             case "$R" in
@@ -438,27 +381,23 @@ main() {
                 configure_nginx
                 ;;
             *)
-                echo ""
-                echo "После установки произведите настройку nginx"
+                print "После установки произведите настройку nginx"
                 ;;
             esac
             ;;
         *)
-            echo ""
-            echo "Продолжаем без установки веб-сервера..."
+            print "Продолжаем без установки веб-сервера..."
             ;;
         esac
         ;;
     *)
-        echo ""
-        echo "Настройте веб сервер на свое усмотрение. Скомпилированные исходники будут расположены в /opt/oper.reag/frontend/"
+        print "Настройте веб сервер на свое усмотрение. Скомпилированные исходники будут расположены в $SOURCE_FOLDER/frontend/"
         ;;
     esac
 
     #
     #
-    echo ""
-    echo "Использовать Asterisk для работы со сценариями (да / нет)? (рекомендуется):"
+    print "Использовать Asterisk для работы со сценариями (да / нет)? (рекомендуется):"
     read -r R
 
     case "$R" in
@@ -466,23 +405,20 @@ main() {
         install_asterisk
         ;;
     *)
-        echo ""
-        echo "Будет произведена компиляция бэкенд-сервиса с отключенными сценариями"
+        print "Будет произведена компиляция бэкенд-сервиса с отключенными сценариями"
         ;;
     esac
 
     #
     #
-    echo ""
-    echo "Использовать хранилище Postgresql (да / нет)? (рекомендуется):"
+    print "Использовать хранилище Postgresql (да / нет)? (рекомендуется):"
     read -r R
 
     case "$R" in
     "Да" | "да" | "д")
         install_postgresql
 
-        echo ""
-        echo "Произвести первоначальную настройку Postgresql (да / нет)? (рекомендуется):"
+        print "Произвести первоначальную настройку Postgresql (да / нет)? (рекомендуется):"
         read -r R
 
         case "$R" in
@@ -490,28 +426,24 @@ main() {
             configure_postgresql
             ;;
         *)
-            echo ""
-            echo "После установки произведите настройку postgresql.conf, pg_hba.conf"
-            echo "Замените пароль у пользователя postgres"
+            print "После установки произведите настройку postgresql.conf, pg_hba.conf"
+            print "Замените пароль у пользователя postgres"
             ;;
         esac
         ;;
     *)
-        echo ""
-        echo "После установки произведите настройку /opt/oper.reag/backend/env.sh"
+        print "После установки произведите настройку $SOURCE_FOLDER/backend/env.sh"
         ;;
     esac
 
     #
     #
-    echo ""
-    echo "Использовать видео-контроллер (да / нет)? (рекомендуется):"
+    print "Использовать видео-контроллер (да / нет)? (рекомендуется):"
     read -r R
 
     case "$R" in
     "Да" | "да" | "д")
-        echo ""
-        echo "Установка набора инструментов для обработки мультимедийных данных..."
+        print "Установка набора инструментов для обработки мультимедийных данных..."
         wget https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
 
         tar -xvf ffmpeg-7.1.tar.xz
@@ -525,71 +457,55 @@ main() {
         sudo make install
         ;;
     *)
-        echo ""
-        echo "Будет произведена компиляция бэкенд-сервиса с отключенным видео-контроллером"
+        print "Будет произведена компиляция бэкенд-сервиса с отключенным видео-контроллером"
         ;;
     esac
 
     #
     #
-    echo ""
-    echo "Запустить миграции (да / нет)? (рекомендуется):"
+    print "Запустить миграции (да / нет)? (рекомендуется):"
     read -r R
 
     case "$R" in
     "Да" | "да" | "д")
-        echo ""
-        echo "Запуск миграций..."
+        print "Запуск миграций..."
 
         install_migrations
         ;;
     *)
-        echo ""
-        echo "Запустите миграции из директории /opt/oper.reag/backend/migrations/"
+        print "Запустите миграции из директории $SOURCE_FOLDER/backend/migrations/"
         ;;
     esac
 
-    echo ""
-    echo "Настройка backend.service..."
+    print "Настройка backend.service..."
     configure_backend_service
 
-    echo ""
-    echo "Настройка backend-ami.service..."
+    print "Настройка backend-ami.service..."
     configure_backend_ami_service
 
-    echo ""
-    echo "Перезагрузка systemd для применения изменений..."
+    print "Перезагрузка systemd для применения изменений..."
     systemctl daemon-reload
 
-    echo ""
-    echo "Перезагрузка backend.service..."
+    print "Перезагрузка backend.service..."
     systemctl restart backend.service
 
-    echo ""
-    echo "Перезагрузка backend-ami.service..."
+    print "Перезагрузка backend-ami.service..."
     systemctl restart backend-ami.service
 
-    echo ""
-    echo "Перезагрузка asterisk.service..."
+    print "Перезагрузка asterisk.service..."
     systemctl restart asterisk.service
 
-    echo ""
-    echo "Установка завершена."
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
-    echo "Пароль пользователя postgres: $POSTGRESQL_PASSWORD"
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
-    echo "Пароль пользователя AMI: $AMI_PASSWORD"
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
-    echo "Интерфейс доступен по адресу: http://$IP/"
-    echo ""
-    echo "*------------------------------------------------------*"
-    echo ""
+    print "Удаляем временные файлы..."
+    rm -rf $SOURCE_FOLDER/tmp
+
+    print "Установка завершена."
+    print "*------------------------------------------------------*"
+    print "Пароль пользователя postgres: $POSTGRESQL_PASSWORD"
+    print "*------------------------------------------------------*"
+    print "Пароль пользователя AMI: $AMI_PASSWORD"
+    print "*------------------------------------------------------*"
+    print "Интерфейс доступен по адресу: http://$IP/"
+    print "*------------------------------------------------------*"
 }
 
 main
