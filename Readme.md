@@ -66,7 +66,7 @@ git clone https://github.com/oreshkindev/oper.reag.git /opt/oper.reag
 
 chmod +x /opt/oper.reag/install.sh
 
-./opt/oper.reag/install.sh
+/opt/oper.reag/install.sh
 ```
 
 Следуйте дальнейшим инструкциям.

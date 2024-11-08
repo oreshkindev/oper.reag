@@ -1,0 +1,18 @@
+[Unit]
+Description=Backend service
+After=network.target
+
+[Service]
+EnvironmentFile=/opt/oper.reag/backend/env.sh
+ExecStart=/bin/bash -c 'source /opt/oper.reag/backend/env.sh && /opt/oper.reag/backend/bin/backend'
+WorkingDirectory=/opt/oper.reag/backend
+User=root
+Group=wheel
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/oper.reag/backend/log/backend.log
+StandardError=append:/opt/oper.reag/backend/log/backend-error.log
+SyslogIdentifier=backend
+
+[Install]
+WantedBy=multi-user.target
