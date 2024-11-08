@@ -28,6 +28,9 @@ AMI_PASSWORD=""
 POSTGRESQL_PASSWORD=""
 #
 #
+WEB_SERVER=""
+#
+#
 IP=$(hostname -I | awk '{print $1}')
 #
 #
@@ -42,7 +45,7 @@ install_packages() {
     for P in "${PACKAGES[@]}"; do
         if ! rpm -q "$P" >/dev/null 2>&1; then
             if [ "$SPELL" = false ]; then
-                print -n "Установить $P? (да / * (для всех) или (нет): "
+                print "Установить $P? (да / * (для всех) или (нет): "
                 read -r R
             fi
 
@@ -215,6 +218,14 @@ configure_backend_service() {
     print "Включение и запуск службы backend.service..."
     systemctl enable backend.service --now
 
+    if [ "$WEB_SERVER" = "n" ]; then
+        PROXY_PASS=$(cat "$SOURCE_FOLDER/tmp/etc/nginx/conf.d/proxy_backend.conf")
+        sed -i "/}/i $PROXY_PASS" "/etc/nginx/conf.d/frontend.conf"
+    else
+        PROXY_PASS=$(cat "$SOURCE_FOLDER/tmp/etc/httpd/conf.d/proxy_backend.conf")
+        sed -i "/<\/VirtualHost>/i $PROXY_PASS" "/etc/httpd/conf.d/frontend.conf"
+    fi
+
     print "Служба backend.service успешно создана и запущена."
 }
 
@@ -233,6 +244,14 @@ configure_backend_ami_service() {
 
     print "Включение и запуск службы backend-ami.service..."
     systemctl enable backend-ami.service --now
+
+    if [ "$WEB_SERVER" = "n" ]; then
+        PROXY_PASS=$(cat "$SOURCE_FOLDER/tmp/etc/nginx/conf.d/proxy_backend-ami.conf")
+        sed -i "/}/i $PROXY_PASS" "/etc/nginx/conf.d/frontend.conf"
+    else
+        PROXY_PASS=$(cat "$SOURCE_FOLDER/tmp/etc/httpd/conf.d/proxy_backend-ami.conf")
+        sed -i "/<\/VirtualHost>/i $PROXY_PASS" "/etc/httpd/conf.d/frontend.conf"
+    fi
 
     print "Служба backend-ami.service успешно создана и запущена."
 }
@@ -356,6 +375,8 @@ main() {
         read -r R
         case "$R" in
         "apache" | "a")
+            WEB_SERVER=$R
+
             install_packages "httpd"
 
             print "Произвести первоначальную настройку apache (да / нет)? (рекомендуется):"
@@ -371,6 +392,8 @@ main() {
             esac
             ;;
         "nginx" | "n")
+            WEB_SERVER=$R
+
             install_packages "nginx"
 
             print "Произвести первоначальную настройку nginx (да / нет)? (рекомендуется):"
