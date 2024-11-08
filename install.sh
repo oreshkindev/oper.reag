@@ -70,20 +70,13 @@ install_migrations() {
 }
 
 install_asterisk() {
+
+    cd
     echo "Проверка и установка зависимостей для Asterisk..."
+
     local PACKAGES=(
-        "gcc"
-        "gcc-c++"
-        "make"
-        "libxml2-devel"
-        "ncurses-devel"
-        "openssl-devel"
-        "newt-devel"
-        "kernel-devel"
-        "sqlite-devel"
-        "libuuid-devel"
-        "jansson"
-        "libsrtp"
+        "epel-release"
+        "chkconfig"
         "libedit-devel"
     )
 
@@ -91,21 +84,19 @@ install_asterisk() {
 
     echo "Установка Asterisk..."
 
-    cd /usr/src || exit
+    # wget http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz
 
     wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-current.tar.gz
 
-    tar -xvf asterisk-22-current.tar.gz
+    tar zxvf asterisk-22-current.tar.gz
 
-    cd asterisk-22.* || exit
+    rm -rf asterisk-22-current.tar.gz
+
+    cd asterisk-22*/
 
     contrib/scripts/install_prereq install
 
-    ./configure --with-jansson-bundled
-
-    make menuselect
-
-    ESC
+    ./configure --libdir=/usr/lib64 --with-pjproject-bundled --with-jansson-bundled
 
     make
 
@@ -113,11 +104,48 @@ install_asterisk() {
 
     make samples
 
-    make config
+    mkdir /etc/asterisk/samples
 
-    ldconfig
+    mv /etc/asterisk/*.* /etc/asterisk/samples/
+
+    make basic-pbx
+
+    touch /usr/lib/systemd/system/asterisk.service
+
+    cat <<'EOF' >/usr/lib/systemd/system/asterisk.service
+[Unit]
+Description=Asterisk PBX and telephony daemon.
+#After=network.target
+#include these if asterisk need to bind to a specific IP (other than 0.0.0.0)
+Wants=network-online.target
+After=network-online.target network.target
+
+[Service]
+Type=simple
+Environment=HOME=/var/lib/asterisk
+WorkingDirectory=/var/lib/asterisk
+ExecStart=/usr/sbin/asterisk -mqf -C /etc/asterisk/asterisk.conf
+ExecReload=/usr/sbin/asterisk -rx 'core reload'
+ExecStop=/usr/sbin/asterisk -rx 'core stop now'
+
+LimitCORE=infinity
+Restart=always
+RestartSec=4
+
+# Prevent duplication of logs with color codes to /var/log/messages
+StandardOutput=null
+
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
 
     echo "Asterisk установлен."
+
+    systemctl enable asterisk.service
+
+    systemctl start asterisk
 
     echo "Конфигурация Asterisk..."
 
@@ -175,7 +203,7 @@ configure_postgresql() {
     echo "Открываем все адреса для прослушивания..."
     sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" /var/lib/pgsql/16/data/postgresql.conf
 
-    echo "host postgres all 127.0.0.1/32 md5" >>/var/lib/pgsql/16/data/pg_hba.conf
+    echo "host postgres all 94.233.73.24/32 md5" >>/var/lib/pgsql/16/data/pg_hba.conf
 
     echo "Генерируем новый пароль для пользователя postgres..."
     ENCRYPTED_PASSWORD=$(openssl rand -base64 12)
@@ -191,6 +219,10 @@ configure_postgresql() {
 
     # Обновляем пароль в окружении бэкенда
     sed -i "s|export DATABASE_URL=.*|export DATABASE_URL=\"postgres://postgres:$ENCRYPTED_PASSWORD@localhost:5432/postgres?sslmode=disable\"|" /opt/oper.reag/backend/env.sh
+
+    echo "Открываем порт 5432 для внешнего доступа..."
+    sudo firewall-cmd --permanent --add-port=5432/tcp
+    sudo firewall-cmd --reload
 
     echo "Перезапуск службы postgresql-16..."
     systemctl restart postgresql-16.service
@@ -307,6 +339,9 @@ SyslogIdentifier=backend
 WantedBy=multi-user.target
 EOL
 
+    chmod +x /opt/oper.reag/backend/env.sh
+    chmod +x /opt/oper.reag/backend/bin/backend
+
     echo "Перезагрузка systemd для применения изменений..."
     systemctl daemon-reload
 
@@ -340,6 +375,9 @@ SyslogIdentifier=backend-ami
 [Install]
 WantedBy=multi-user.target
 EOL
+
+    chmod +x /opt/oper.reag/backend-ami/env.sh
+    chmod +x /opt/oper.reag/backend-ami/bin/backend-ami
 
     echo "Перезагрузка systemd для применения изменений..."
     systemctl daemon-reload
@@ -505,7 +543,10 @@ main() {
         ;;
     esac
 
+    echo "Настройка backend.service..."
     configure_backend_service
+
+    echo "Настройка backend-ami.service..."
     configure_backend_ami_service
 
     echo "Перезагрузка systemd для применения изменений..."
