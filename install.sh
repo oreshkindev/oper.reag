@@ -418,22 +418,22 @@ install_http_server() {
 
 # Конфигурация postgresql
 setup_postgresql_cfg() {
-    echo "Инициализируем базу данных..."
     echo ""
+    echo "Инициализируем базу данных..."
     postgresql-16-setup initdb
 
-    echo "Добавляем службу postgresql-16 в автозапуск..."
     echo ""
+    echo "Добавляем службу postgresql-16 в автозапуск..."
     systemctl enable postgresql-16.service --now
 
-    echo "Открываем адреса для прослушивания..."
     echo ""
+    echo "Открываем адреса для прослушивания..."
     sed -i "s^#listen_addresses = 'localhost'^listen_addresses = '*'^" /var/lib/pgsql/16/data/postgresql.conf
 
     echo "host    replication     all             $SE_HOST/32             md5" >>/var/lib/pgsql/16/data/pg_hba.conf
 
-    echo "Устанавливаем пароль для пользователя postgres..."
     echo ""
+    echo "Устанавливаем пароль для пользователя postgres..."
     sudo -u postgres psql -c "ALTER USER postgres WITH ENCRYPTED PASSWORD '$SE_PASS_POSTGRES';"
 
     echo "*------------------------------------------------------*"
@@ -458,8 +458,8 @@ setup_postgresql_cfg() {
         exit 1
     fi
 
-    echo "Перезапуск службы postgresql-16..."
     echo ""
+    echo "Перезапуск службы postgresql-16..."
     systemctl restart postgresql-16.service
 }
 
@@ -536,8 +536,8 @@ install_database_service() {
 
 # Конфигурация бэкенд сервера
 setup_backend_server() {
-    echo "Создание службы backend.service..."
     echo ""
+    echo "Создание службы backend.service..."
     # Проверяем наличие временного файла конфигурации
     if [ -f "$SE_SOURCE/tmp/etc/systemd/system/backend.service" ]; then
         # Копируем файл в директорию системных служб
@@ -555,21 +555,34 @@ setup_backend_server() {
     chmod 700 $SE_SOURCE/backend/bin/backend
     chown root:root $SE_SOURCE/backend/bin/backend
 
-    # Обновляем переменные окружения
+    echo ""
+    echo "Обновляем переменные окружения..."
     sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:$SE_PASS_POSTGRES@localhost:5432/postgres?sslmode=disable\"^" $SE_SOURCE/backend/env.sh
 
     sed -i "s^export MEDIA_PATH=.*^export MEDIA_PATH=\"$SE_SOURCE/frontend/in\"^" $SE_SOURCE/backend/env.sh
 
-    echo "Перезагрузка systemd для применения изменений..."
     echo ""
+    echo "Применяем миграции..."
+    for M in $SE_SOURCE/backend/migrations/*.sql; do
+        sudo -u postgres psql -d postgres -f "$M"
+
+        if [ $? -ne 0 ]; then
+            echo ""
+            print "Ошибка при выполнении миграции $M."
+            exit 1
+        fi
+    done
+
+    echo ""
+    echo "Перезагрузка systemd для применения изменений..."
     systemctl daemon-reload
 
-    echo "Включение и запуск службы backend.service..."
     echo ""
+    echo "Включение и запуск службы backend.service..."
     systemctl enable backend.service --now
 
-    echo "Служба backend.service успешно создана и запущена."
     echo ""
+    echo "Служба backend.service успешно создана и запущена."
 }
 
 # Основной сценарий
