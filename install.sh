@@ -249,6 +249,13 @@ setup_apache_cfg() {
         echo "Ошибка при перезагрузке конфигурации firewall."
         exit 1
     fi
+
+    echo ""
+    echo "*------------------------------------------------------*"
+    echo ""
+    echo "Интерфейс доступен по адресу: http://$SE_HOST/"
+    echo ""
+    echo "*------------------------------------------------------*"
 }
 
 # Конфигурация веб-сервера nginx
@@ -311,6 +318,13 @@ setup_nginx_cfg() {
         echo "Ошибка при перезагрузке конфигурации firewall."
         exit 1
     fi
+
+    echo ""
+    echo "*------------------------------------------------------*"
+    echo ""
+    echo "Интерфейс доступен по адресу: http://$SE_HOST/"
+    echo ""
+    echo "*------------------------------------------------------*"
 }
 
 # Установка и минимальная конфигурация веб-сервера
@@ -556,8 +570,22 @@ setup_backend_server() {
     chown root:root $SE_SOURCE/backend/bin/backend
 
     echo ""
+    echo "Обновляем конфигурацию..."
+    sed -i "s^EnvironmentFile=.*^EnvironmentFile=$SE_SOURCE/backend/env.sh^" /etc/systemd/system/backend.service
+
+    sed -i "s^WorkingDirectory=.*^WorkingDirectory=$SE_SOURCE/backend^" /etc/systemd/system/backend.service
+
+    sed -i "s^ExecStart=.*^ExecStart=/bin/bash -c 'source $SE_SOURCE/backend/env.sh && $SE_SOURCE/backend/bin/backend'^" /etc/systemd/system/backend.service
+
+    sed -i "s^StandardOutput=.*^StandardOutput=append:$SE_SOURCE/backend/log/backend.log^" /etc/systemd/system/backend.service
+
+    sed -i "s^StandardError=.*^StandardError=append:$SE_SOURCE/backend/log/backend-error.log^" /etc/systemd/system/backend.service
+
+    echo ""
     echo "Обновляем переменные окружения..."
     sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:$SE_PASS_POSTGRES@localhost:5432/postgres?sslmode=disable\"^" $SE_SOURCE/backend/env.sh
+
+    sed -i "s^export AMI_PASS=.*^export AMI_PASS=\"$SE_PASS_AMI\"^" $SE_SOURCE/backend/env.sh
 
     sed -i "s^export MEDIA_PATH=.*^export MEDIA_PATH=\"$SE_SOURCE/frontend/in\"^" $SE_SOURCE/backend/env.sh
 
@@ -585,6 +613,140 @@ setup_backend_server() {
     echo "Служба backend.service успешно создана и запущена."
 }
 
+# Установка видео-сервера
+install_hls_server() {
+    os_select "Установить видео-сервер?" "Да" "Нет"
+    case $? in
+    1)
+        echo ""
+        echo "Загружаем исходники..."
+        wget https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+
+        tar -xvf ffmpeg-7.1.tar.xz
+
+        cd ffmpeg-7.1
+
+        echo ""
+        echo "Конфигурируем ffmpeg..."
+        ./configure --disable-x86asm
+
+        make
+
+        echo ""
+        echo "Устанавливаем..."
+        sudo make install
+        ;;
+    2)
+        echo ""
+        echo "Продолжаем без видео-сервера..."
+        ;;
+    esac
+}
+
+# Установка и минимальная конфигурация VOIP
+install_voip_server() {
+    os_select "Установить VOIP-сервер?" "Да" "Нет"
+    case $? in
+    1)
+        os_select "Выберите действие" "Asterisk"
+        case $? in
+        1)
+            echo ""
+            echo "Проверка и установка зависимостей для Asterisk..."
+            os_install "epel-release" "chkconfig" "libedit-devel"
+
+            echo ""
+            echo "Загружаем исходники..."
+            wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-current.tar.gz
+
+            echo ""
+            echo "Распаковка архива..."
+            tar zxvf asterisk-22-current.tar.gz
+
+            echo ""
+            echo "Удаление архива..."
+            rm -rf asterisk-22-current.tar.gz
+
+            cd asterisk-22*/
+
+            echo ""
+            echo "Установка необходимых зависимостей..."
+            contrib/scripts/install_prereq install
+
+            echo ""
+            echo "Настройка системы..."
+            ./configure --libdir=/usr/lib64 --with-pjproject-bundled --with-jansson-bundled
+
+            make
+
+            make install
+
+            make samples
+
+            mkdir /etc/asterisk/samples
+
+            mv /etc/asterisk/*.* /etc/asterisk/samples/
+
+            make basic-pbx
+
+            echo ""
+            echo "Создание системной службы..."
+            touch /usr/lib/systemd/system/asterisk.service
+
+            echo ""
+            echo "Добавляем содержимое..."
+            cp "$SE_SOURCE/tmp/asterisk/asterisk.service" /usr/lib/systemd/system/asterisk.service
+
+            echo ""
+            echo "Конфигурация Asterisk.Создание пользовательских конфигурационных файлов..."
+
+            touch "/etc/asterisk/pjsip_custom.conf"
+
+            touch "/etc/asterisk/extensions_custom.conf"
+
+            echo "#include pjsip_custom.conf" >>"/etc/asterisk/pjsip.conf"
+
+            echo "#include extensions_custom.conf" >>"/etc/asterisk/extensions.conf"
+
+            sed -i "s^enabled =.*^enabled = yes^" /etc/asterisk/manager.conf
+
+            echo ""
+            echo "Добавление AMI пользователя"
+
+            echo "" >>/etc/asterisk/manager.conf
+            echo "[admin]" >>/etc/asterisk/manager.conf
+            echo "secret = $SE_PASS_AMI" >>/etc/asterisk/manager.conf
+            echo "read = all" >>/etc/asterisk/manager.conf
+            echo "write = all" >>/etc/asterisk/manager.conf
+
+            echo ""
+            echo "Конфигурация AMI добавлена в manager.conf."
+
+            echo ""
+            echo "*------------------------------------------------------*"
+            echo ""
+            echo "Пароль пользователя AMI: \e[38;5;111m$SE_PASS_AMI\e[0m"
+            echo ""
+            echo "*------------------------------------------------------*"
+
+            echo ""
+            echo "Asterisk установлен. Запускаю службы..."
+            systemctl enable asterisk.service
+
+            systemctl start asterisk
+
+            echo ""
+            echo "Конфигурация Asterisk завершена."
+            ;;
+        esac
+        ;;
+    2)
+        echo ""
+        echo "Продолжаем без видео-сервера..."
+        ;;
+    esac
+}
+
 # Основной сценарий
 main() {
     # Запрос на обновление системных компонентов
@@ -598,6 +760,15 @@ main() {
 
     # Запрос на минимальную конфигурацию бэкенд сервера
     setup_backend_server
+
+    # Запрос на установку видео-сервера
+    install_hls_server
+
+    # Запрос на установку и минимальную конфигурацию VOIP
+    install_voip_server
+
+    echo ""
+    echo "Установка завершена."
 }
 
 # Обработка сигналов для корректного завершения

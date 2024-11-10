@@ -26,6 +26,11 @@ export SERVICE_PORT=":9000"
 export DATABASE_URL=""
 
 #
+export AMI_USER="admin"
+#
+export AMI_PASS=""
+
+#
 export MEDIA_PATH=""
 
 # Randomly generated base64 encoded 32 byte string
