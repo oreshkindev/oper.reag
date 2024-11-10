@@ -162,7 +162,7 @@ setup_apache_cfg() {
     fi
 
     # Изменяем host
-    sed -i "s/^;ServerName example.com/ServerName $SE_HOST" "/etc/httpd/conf.d/example.conf"
+    sed -i "s^ServerName example.com^ServerName $SE_HOST^" /etc/httpd/conf.d/example.conf
     if [ $? -ne 0 ]; then
         echo ""
         echo "Ошибка при изменении файла конфигурации Apache."
@@ -170,7 +170,7 @@ setup_apache_cfg() {
     fi
 
     # Изменяем путь к основной директории фронтенда
-    sed -i "s/^;DocumentRoot /var/www/example.com/html/DocumentRoot $SE_SOURCE/frontend" "/etc/httpd/conf.d/example.conf"
+    sed -i "s^DocumentRoot /var/www/example.com/html^DocumentRoot $SE_SOURCE/frontend^" /etc/httpd/conf.d/example.conf
     if [ $? -ne 0 ]; then
         echo ""
         echo "Ошибка при изменении файла конфигурации Apache."
@@ -178,7 +178,7 @@ setup_apache_cfg() {
     fi
 
     # Аналогично
-    sed -i "s/^;<Directory /var/www/example.com/html>/<Directory $SE_SOURCE/frontend>" "/etc/httpd/conf.d/example.conf"
+    sed -i "s^<Directory /var/www/example.com/html>^<Directory $SE_SOURCE/frontend>^" /etc/httpd/conf.d/example.conf
     if [ $? -ne 0 ]; then
         echo ""
         echo "Ошибка при изменении файла конфигурации Apache."
@@ -230,7 +230,7 @@ setup_nginx_cfg() {
     fi
 
     # Изменяем host
-    sed -i "s/^;server_name example.com;/server_name $SE_HOST;" "/etc/nginx/conf.d/example.conf"
+    sed -i "s^server_name example.com;^server_name $SE_HOST;^" /etc/nginx/conf.d/example.conf
     if [ $? -ne 0 ]; then
         echo ""
         echo "Ошибка при изменении файла конфигурации nginx."
@@ -238,7 +238,7 @@ setup_nginx_cfg() {
     fi
 
     # Изменяем путь к основной директории фронтенда
-    sed -i "s/^;root /var/www/example.com/html;/root $SE_SOURCE/frontend;" "/etc/nginx/conf.d/example.conf"
+    sed -i "s^root /var/www/example.com/html;^root $SE_SOURCE/frontend;^" /etc/nginx/conf.d/example.conf
     if [ $? -ne 0 ]; then
         echo ""
         echo "Ошибка при изменении файла конфигурации nginx."
