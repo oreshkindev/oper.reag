@@ -162,7 +162,7 @@ setup_apache_cfg() {
     fi
 
     # Изменяем host
-    sed -i "s^ServerName example.com^ServerName $SE_HOST^" /etc/httpd/conf.d/example.conf
+    sed -i "s^ServerName example.com^ServerName $SE_HOST:80^" /etc/httpd/conf.d/example.conf
     if [ $? -ne 0 ]; then
         echo ""
         echo "Ошибка при изменении файла конфигурации Apache."
@@ -279,7 +279,7 @@ setup_nginx_cfg() {
 
 # Установка и минимальная конфигурация веб-сервера
 install_http_server() {
-    os_select "Установить веб-сервер?" "Да" "Нет"
+    os_select "Установить веб-сервер?" "Да" "Нет" "Удалить"
     case $? in
     1)
         os_select "Выберите действие" "apache" "nginx"
@@ -325,6 +325,41 @@ install_http_server() {
     2)
         echo ""
         echo "Продолжаем без установки веб-сервера..."
+        ;;
+    3)
+        os_select "Выберите действие" "apache" "nginx"
+        case $? in
+        1)
+            echo ""
+            echo "Удаляем Apache..."
+            # Останавливаем службу
+            systemctl stop httpd
+
+            # Удаляем Apache
+            yum remove -y httpd
+
+            # Очищаем ненужные зависимости
+            yum autoremove -y
+
+            echo ""
+            echo "Apache успешно удален"
+            ;;
+        2)
+            echo ""
+            echo "Удаляем nginx..."
+            # Останавливаем службу
+            systemctl stop nginx
+
+            # Удаляем nginx
+            yum remove -y nginx
+
+            # Очищаем ненужные зависимости
+            yum autoremove -y
+
+            echo ""
+            echo "nginx успешно удален"
+            ;;
+        esac
         ;;
     esac
 }
