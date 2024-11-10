@@ -463,7 +463,6 @@ install_database_service() {
             echo ""
             echo "Устанавливаем postgresql"
             os_install "https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
-            yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm
 
             echo ""
             echo "Отключаем встроенный модуль"
