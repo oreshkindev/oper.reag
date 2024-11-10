@@ -251,17 +251,8 @@ install_ffmpeg() {
 
 # Основная логика
 main() {
-    yum check-update
-
-    install_packages "nginx"
-
-    configure_nginx
 
     install_asterisk
-
-    install_postgresql
-
-    configure_postgresql
 
     install_ffmpeg
 

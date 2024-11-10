@@ -23,10 +23,10 @@ export SERVICE_PORT=":9000"
 #   sslmode=disable means that the connection with our database
 #   will not be encrypted.
 #
-export DATABASE_URL="postgres://postgres:secret@localhost:5432/postgres?sslmode=disable"
+export DATABASE_URL=""
 
 #
-export MEDIA_PATH="/opt/oper.reag/frontend/"
+export MEDIA_PATH=""
 
 # Randomly generated base64 encoded 32 byte string
 # used for various purposes such as signing tokens and

@@ -534,6 +534,44 @@ install_database_service() {
     esac
 }
 
+# Конфигурация бэкенд сервера
+setup_backend_server() {
+    echo "Создание службы backend.service..."
+    echo ""
+    # Проверяем наличие временного файла конфигурации
+    if [ -f "$SE_SOURCE/tmp/etc/systemd/system/backend.service" ]; then
+        # Копируем файл в директорию системных служб
+        cp "$SE_SOURCE/tmp/etc/systemd/system/backend.service" /etc/systemd/system/backend.service
+    else
+        echo ""
+        echo "Файл конфигурации $SE_SOURCE/tmp/etc/systemd/system/backend.service не найден."
+        exit 1
+    fi
+
+    # Выставляем необходимые права
+    chmod 600 $SE_SOURCE/backend/env.sh
+    chown root:root $SE_SOURCE/backend/env.sh
+
+    chmod 700 $SE_SOURCE/backend/bin/backend
+    chown root:root $SE_SOURCE/backend/bin/backend
+
+    # Обновляем переменные окружения
+    sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:$SE_PASS_POSTGRES@localhost:5432/postgres?sslmode=disable\"^" $SE_SOURCE/backend/env.sh
+
+    sed -i "s^export MEDIA_PATH=.*^export MEDIA_PATH=\"$SE_SOURCE/frontend/in\"^" $SE_SOURCE/backend/env.sh
+
+    echo "Перезагрузка systemd для применения изменений..."
+    echo ""
+    systemctl daemon-reload
+
+    echo "Включение и запуск службы backend.service..."
+    echo ""
+    systemctl enable backend.service --now
+
+    echo "Служба backend.service успешно создана и запущена."
+    echo ""
+}
+
 # Основной сценарий
 main() {
     # Запрос на обновление системных компонентов
@@ -544,6 +582,9 @@ main() {
 
     # Запрос на установку и минимальную конфигурацию СУБД
     install_database_service
+
+    # Запрос на минимальную конфигурацию бэкенд сервера
+    setup_backend_server
 }
 
 # Обработка сигналов для корректного завершения
