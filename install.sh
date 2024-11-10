@@ -384,6 +384,124 @@ install_http_server() {
     esac
 }
 
+# Конфигурация postgresql
+setup_postgresql_cfg() {
+    echo "Инициализируем базу данных..."
+    echo ""
+    postgresql-16-setup initdb
+
+    echo "Добавляем службу postgresql-16 в автозапуск..."
+    echo ""
+    systemctl enable postgresql-16.service --now
+
+    echo "Открываем адреса для прослушивания..."
+    echo ""
+    sed -i "s^#listen_addresses = 'localhost'^listen_addresses = '*'^" /var/lib/pgsql/16/data/postgresql.conf
+
+    echo "host postgres all $SE_HOST/32 md5" >>/var/lib/pgsql/16/data/pg_hba.conf
+
+    echo "Устанавливаем пароль для пользователя postgres..."
+    echo ""
+    sudo -u postgres psql -c "ALTER USER postgres WITH ENCRYPTED PASSWORD '$SE_PASS_POSTGRES';"
+
+    echo "*------------------------------------------------------*"
+    echo ""
+    echo "Пароль пользователя postgres: $POSTGRESQL_PASSWORD"
+    echo ""
+    echo "*------------------------------------------------------*"
+
+    echo ""
+    echo "Открываем порт :5432"
+    if ! sudo firewall-cmd --list-ports | grep -q 5432/tcp; then
+        if ! sudo firewall-cmd --permanent --add-port=5432/tcp; then
+            echo ""
+            echo "Ошибка при открытии порта :5432."
+            exit 1
+        fi
+    fi
+
+    if ! sudo firewall-cmd --reload; then
+        echo ""
+        echo "Ошибка при перезагрузке конфигурации firewall."
+        exit 1
+    fi
+
+    echo "Перезапуск службы postgresql-16..."
+    echo ""
+    systemctl restart postgresql-16.service
+}
+
+# Установка и минимальная конфигурация СУБД
+install_database_service() {
+    os_select "Установить систему управления базой данных (СУБД)?" "Да" "Нет" "Удалить"
+    case $? in
+    1)
+        os_select "Выберите действие" "Postgresql"
+        case $? in
+        1)
+            echo ""
+            echo "Устанавливаем postgresql"
+            os_install "https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+
+            echo ""
+            echo "Отключаем встроенный модуль"
+            yum -qy module disable postgresql
+
+            os_install "postgresql16-server" "postgresql16"
+
+            os_select "Произвести минимальную настройку postgresql?" "Да" "Нет"
+            case $? in
+            1)
+                echo ""
+                echo "Настраиваем СУБД..."
+                setup_postgresql_cfg
+                ;;
+            2)
+                echo ""
+                echo "Продолжаем без настройки СУБД..."
+                ;;
+            esac
+            ;;
+        esac
+        ;;
+    2)
+        echo ""
+        echo "Продолжаем без СУБД..."
+        ;;
+    3)
+        os_select "Выберите действие" "Postgresql"
+        case $? in
+        1)
+            echo ""
+            echo "Останавливаем службу postgresql-16..."
+            systemctl stop postgresql-16.service
+
+            echo ""
+            echo "Удаляем postgresql-16 и связанные пакеты..."
+            yum remove -y postgresql16-server postgresql16
+
+            echo ""
+            echo "Очищаем ненужные зависимости..."
+            yum autoremove -y
+
+            echo ""
+            echo "Закрываем порт :5432"
+            if sudo firewall-cmd --list-ports | grep -q 5432/tcp; then
+                if ! sudo firewall-cmd --permanent --remove-port=5432/tcp; then
+                    echo ""
+                    echo "Ошибка при закрытии порта :5432."
+                fi
+                sudo firewall-cmd --reload
+            fi
+
+            echo ""
+            echo "PostgreSQL успешно удален."
+            ;;
+        esac
+        ;;
+    esac
+}
+
 # Основной сценарий
 main() {
     # Запрос на обновление системных компонентов
@@ -391,6 +509,9 @@ main() {
 
     # Запрос на установку и минимальную конфигурацию веб-сервера
     install_http_server
+
+    # Запрос на установку и минимальную конфигурацию СУБД
+    install_database_service
 }
 
 # Обработка сигналов для корректного завершения
