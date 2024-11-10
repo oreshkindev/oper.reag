@@ -12,6 +12,7 @@ if [ ! -f /etc/redhat-release ]; then
     exit 1
 fi
 
+echo -e "\e[38;5;111m"
 cat <<EOL
 
                  ..............
@@ -43,6 +44,7 @@ cat <<EOL
                   Версия: 1.0.0
 
 EOL
+echo -e "\e[0m"
 
 # Установка указанных пакетов.
 # Параметры:
@@ -76,6 +78,17 @@ os_install() {
                 fi
                 ;;
             esac
+        fi
+
+        if [[ "$p" == http* ]]; then
+            echo ""
+            echo "Устанавливаем пакет из URL: $p"
+            if ! yum install -y "$p"; then
+                echo ""
+                echo "Не удалось установить пакет из $p. Проверьте подключение к интернету и повторите попытку."
+                exit 1
+            fi
+            continue
         fi
 
         echo ""
@@ -427,7 +440,7 @@ setup_postgresql_cfg() {
 
     echo "*------------------------------------------------------*"
     echo ""
-    echo "Пароль пользователя postgres: $SE_PASS_POSTGRES"
+    echo -e "Пароль пользователя postgres: \e[38;5;111m$SE_PASS_POSTGRES\e[0m"
     echo ""
     echo "*------------------------------------------------------*"
 
