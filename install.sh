@@ -12,7 +12,6 @@ if [ ! -f /etc/redhat-release ]; then
     exit 1
 fi
 
-echo -e "\e[38;5;111m"
 cat <<EOL
 
                  ..............
@@ -44,7 +43,6 @@ cat <<EOL
                   Версия: 1.0.0
 
 EOL
-echo -e "\e[0m"
 
 # Установка указанных пакетов.
 # Параметры:
@@ -432,7 +430,7 @@ setup_postgresql_cfg() {
     echo ""
     sed -i "s^#listen_addresses = 'localhost'^listen_addresses = '*'^" /var/lib/pgsql/16/data/postgresql.conf
 
-    echo "host postgres all $SE_HOST/32 md5" >>/var/lib/pgsql/16/data/pg_hba.conf
+    echo "host    replication     all             $SE_HOST/32             md5" >>/var/lib/pgsql/16/data/pg_hba.conf
 
     echo "Устанавливаем пароль для пользователя postgres..."
     echo ""
