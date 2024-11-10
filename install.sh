@@ -54,7 +54,28 @@ os_install() {
         if rpm -q "$p" >/dev/null 2>&1; then
             echo ""
             echo "$p уже установлен."
-            continue
+            os_select "Обновить?" "Да" "Нет" "Принудительно"
+            case $? in
+            1)
+                echo ""
+                echo "Обновляем..."
+                yum update -y "$p"
+                ;;
+            2)
+                echo ""
+                echo "Продолжаем без обновления..."
+                continue
+                ;;
+            3)
+                echo ""
+                echo "Устанавливаем $p..."
+                if ! yum install -y "$p"; then
+                    echo ""
+                    echo "Не удалось установить $p. Проверьте подключение к интернету и повторите попытку."
+                    exit 1
+                fi
+                ;;
+            esac
         fi
 
         echo ""
@@ -406,7 +427,7 @@ setup_postgresql_cfg() {
 
     echo "*------------------------------------------------------*"
     echo ""
-    echo "Пароль пользователя postgres: $POSTGRESQL_PASSWORD"
+    echo "Пароль пользователя postgres: $SE_PASS_POSTGRES"
     echo ""
     echo "*------------------------------------------------------*"
 
@@ -442,6 +463,7 @@ install_database_service() {
             echo ""
             echo "Устанавливаем postgresql"
             os_install "https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+            yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm
 
             echo ""
             echo "Отключаем встроенный модуль"
