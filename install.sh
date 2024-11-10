@@ -204,10 +204,12 @@ setup_apache_cfg() {
 
     echo ""
     echo "Открываем порт :80"
-    if ! sudo firewall-cmd --permanent --add-service=http; then
-        echo ""
-        echo "Ошибка при открытии порта :80."
-        exit 1
+    if ! sudo firewall-cmd --list-services | grep -q http; then
+        if ! sudo firewall-cmd --permanent --add-service=http; then
+            echo ""
+            echo "Ошибка при открытии порта :80."
+            exit 1
+        fi
     fi
 
     if ! sudo firewall-cmd --reload; then
@@ -264,10 +266,12 @@ setup_nginx_cfg() {
 
     echo ""
     echo "Открываем порт :80"
-    if ! sudo firewall-cmd --permanent --add-service=http; then
-        echo ""
-        echo "Ошибка при открытии порта :80."
-        exit 1
+    if ! sudo firewall-cmd --list-services | grep -q http; then
+        if ! sudo firewall-cmd --permanent --add-service=http; then
+            echo ""
+            echo "Ошибка при открытии порта :80."
+            exit 1
+        fi
     fi
 
     if ! sudo firewall-cmd --reload; then
@@ -341,6 +345,14 @@ install_http_server() {
             # Очищаем ненужные зависимости
             yum autoremove -y
 
+            # Закрываем порт :80
+            if sudo firewall-cmd --list-services | grep -q http; then
+                if ! sudo firewall-cmd --permanent --remove-service=http; then
+                    echo ""
+                    echo "Ошибка при закрытии порта :80."
+                fi
+                sudo firewall-cmd --reload
+            fi
             echo ""
             echo "Apache успешно удален"
             ;;
@@ -356,6 +368,14 @@ install_http_server() {
             # Очищаем ненужные зависимости
             yum autoremove -y
 
+            # Закрываем порт :80
+            if sudo firewall-cmd --list-services | grep -q http; then
+                if ! sudo firewall-cmd --permanent --remove-service=http; then
+                    echo ""
+                    echo "Ошибка при закрытии порта :80."
+                fi
+                sudo firewall-cmd --reload
+            fi
             echo ""
             echo "nginx успешно удален"
             ;;

@@ -1,18 +1,22 @@
 [Unit]
-Description=Backend AMI service
-After=network.target
+Description=Oper.reag backend-ami daemon.
+Wants=network-online.target
+After=network-online.target network.target
 
 [Service]
+Type=simple
 EnvironmentFile=/opt/oper.reag/backend-ami/env.sh
-ExecStart=/bin/bash -c 'source /opt/oper.reag/backend-ami/env.sh && /opt/oper.reag/backend-ami/bin/backend-ami'
 WorkingDirectory=/opt/oper.reag/backend-ami
+ExecStart=/bin/bash -c 'source /opt/oper.reag/backend-ami/env.sh && /opt/oper.reag/backend-ami/bin/backend-ami'
 User=root
 Group=wheel
-Restart=always
-RestartSec=5
 StandardOutput=append:/opt/oper.reag/backend-ami/log/backend-ami.log
 StandardError=append:/opt/oper.reag/backend-ami/log/backend-ami-error.log
 SyslogIdentifier=backend-ami
+
+LimitCORE=infinity
+Restart=always
+RestartSec=4
 
 [Install]
 WantedBy=multi-user.target

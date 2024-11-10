@@ -1,18 +1,22 @@
 [Unit]
-Description=Backend service
-After=network.target
+Description=Oper.reag backend daemon.
+Wants=network-online.target
+After=network-online.target network.target
 
 [Service]
+Type=simple
 EnvironmentFile=/opt/oper.reag/backend/env.sh
-ExecStart=/bin/bash -c 'source /opt/oper.reag/backend/env.sh && /opt/oper.reag/backend/bin/backend'
 WorkingDirectory=/opt/oper.reag/backend
+ExecStart=/bin/bash -c 'source /opt/oper.reag/backend/env.sh && /opt/oper.reag/backend/bin/backend'
 User=root
 Group=wheel
-Restart=always
-RestartSec=5
 StandardOutput=append:/opt/oper.reag/backend/log/backend.log
 StandardError=append:/opt/oper.reag/backend/log/backend-error.log
 SyslogIdentifier=backend
+
+LimitCORE=infinity
+Restart=always
+RestartSec=4
 
 [Install]
 WantedBy=multi-user.target
