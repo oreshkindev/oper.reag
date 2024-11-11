@@ -253,7 +253,7 @@ setup_apache_cfg() {
     echo ""
     echo "*------------------------------------------------------*"
     echo ""
-    echo "Интерфейс доступен по адресу: http://$SE_HOST/"
+    echo "Интерфейс доступен по адресу: \e[38;5;111mhttp://$SE_HOST/\e[0m"
     echo ""
     echo "*------------------------------------------------------*"
 }
@@ -322,7 +322,7 @@ setup_nginx_cfg() {
     echo ""
     echo "*------------------------------------------------------*"
     echo ""
-    echo "Интерфейс доступен по адресу: http://$SE_HOST/"
+    echo "Интерфейс доступен по адресу: \e[38;5;111mhttp://$SE_HOST/\e[0m"
     echo ""
     echo "*------------------------------------------------------*"
 }
@@ -618,6 +618,8 @@ install_hls_server() {
     os_select "Установить видео-сервер?" "Да" "Нет"
     case $? in
     1)
+        yum groupinstall -y "Development Tools"
+
         echo ""
         echo "Загружаем исходники..."
         wget https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
@@ -690,12 +692,8 @@ install_voip_server() {
             make basic-pbx
 
             echo ""
-            echo "Создание системной службы..."
-            touch /usr/lib/systemd/system/asterisk.service
-
-            echo ""
             echo "Добавляем содержимое..."
-            cp "$SE_SOURCE/tmp/asterisk/asterisk.service" /usr/lib/systemd/system/asterisk.service
+            cp "$SE_SOURCE/tmp/etc/systemd/system/asterisk.service" /usr/lib/systemd/system/asterisk.service
 
             echo ""
             echo "Конфигурация Asterisk.Создание пользовательских конфигурационных файлов..."
@@ -713,7 +711,6 @@ install_voip_server() {
             echo ""
             echo "Добавление AMI пользователя"
 
-            echo "" >>/etc/asterisk/manager.conf
             echo "[admin]" >>/etc/asterisk/manager.conf
             echo "secret = $SE_PASS_AMI" >>/etc/asterisk/manager.conf
             echo "read = all" >>/etc/asterisk/manager.conf
