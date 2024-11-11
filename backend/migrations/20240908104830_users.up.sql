@@ -41,8 +41,8 @@ VALUES
     (
         '',
         '',
-        'alexander0200@standard-it.ru',
-        'Сергеев Александр',
+        'example@example.com',
+        'Гость',
         '$2a$10$WtsHqf0Pu1zU91QLSncKLO/ffn.2dFp0c5szz.uCTwEZyHTXAAdLu', -- 2p0f+9EGFWgCPvlJCQ
         4,
         '+70000000000',
