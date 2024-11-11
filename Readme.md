@@ -1,4 +1,39 @@
-### Предварительные требования
+<p align="center">
+  <br>
+  <img width="400" src="favicon.svg" alt="Программное обеспечение «Оперативное реагирование»">
+  <br>
+  <br>
+</p>
+
+<p align="center">
+Программное обеспечение «Оперативное реагирование»
+  <br>
+  Версия: 1.0.0
+</p>
+
+### Автоматическая установка и настройка
+
+Копируем репозиторий
+
+```bash
+git clone https://github.com/oreshkindev/oper.reag.git /opt/oper.reag
+```
+
+Выставляем права для скрипта
+
+```bash
+chmod +x /opt/oper.reag/install.sh
+```
+
+Запускаем скрипт и выбираем все что нам нужно
+
+```bash
+/opt/oper.reag/install.sh
+```
+
+Используя установщик, вероятность того что у вас что-то не получится приравнивается к нулю.
+
+### Ручная установка и настройка
 
 Убедитесь, что вы вводите все команды от имени пользователя «root». Введите «su», затем свой пароль пользователя «root».
 
@@ -12,7 +47,7 @@ su -
 yum check-update
 ```
 
-### Отключите SELinux
+#### Отключите SELinux
 
 Обязательно отключите модуль безопасности ядра Linux — SELinux перед установкой.
 
@@ -40,7 +75,7 @@ nano /etc/selinux/config
 SELINUX=disabled
 ```
 
-### Перезагрузка
+#### Перезагрузка
 
 Для того, чтобы изменения применились, перезагружаем систему
 
@@ -52,7 +87,7 @@ reboot
 
 Далее перейдем к настройке веб-сервера который будет отдавать нашу панель управления. Я опишу процесс установки и настройки для apache и nginx, какую выбрать - решать вам.
 
-### Установка и настройка веб-сервера nginx
+#### Установка и настройка веб-сервера nginx
 
 Устанавливаем веб-сервер
 
@@ -62,7 +97,7 @@ yum install -y nginx
 
 После установки веб-сервера, его необходимо настроить.
 
-#### Создаем файл конфигурации и добавляем блок
+##### Создаем файл конфигурации и добавляем блок
 
 По умолчанию nginx расположен в директории /etc/nginx/ . Замените example на имя, которое ассоциируется с вашим сервисом.
 
@@ -70,12 +105,30 @@ yum install -y nginx
 cat <<EOL >/etc/nginx/conf.d/example.conf
 server {
     listen 80;
-    server_name example.com;  # Замените на доменное имя или IP-адрес сервера
+    listen [::]:80;
 
+    # Замените example.com на доменное имя или ip-адрес сервера
+    server_name example.com;
+
+    # Указываем корневую директорию для статических файлов
+    root /opt/oper.reag/frontend;
+
+    # Индексный файл по умолчанию
+    index index.html;
+
+    # Основная локация для обработки запросов
     location / {
-        root /var/www/example.com/html;  # Путь к собранным файлам фронтенда
-        try_files \$uri \$uri/ /index.html;
+        # Пытаемся найти файл или директорию, если не найдено - перенаправляем на index.html
+        try_files $uri $uri/ /index.html;
     }
+
+    # Кэширование статических файлов
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 7d;
+        add_header Cache-Control "public, must-revalidate";
+    }
+
+    # Проксирование на бэкенд
 }
 EOL
 ```
@@ -104,29 +157,50 @@ sudo firewall-cmd --reload
 На этом первичная конфигурация nginx завершена. Результат можно проверить выполнив команду
 
 ```bash
-echo "$(hostname -I | awk '{print $1}')"
-
-curl http://ip-адрес сервера
+echo "curl http://$(hostname -I | awk '{print $1}')"
 ```
 
 Или открыть адрес в браузере.
 
-### Установка и настройка веб-сервера apache
+#### Установка и настройка веб-сервера apache
 
 По умолчанию apache расположен в директории /etc/httpd/ . Замените example на имя, которое ассоциируется с вашим сервисом.
 
 ```bash
 cat <<EOL >/etc/httpd/conf.d/example.conf
 <VirtualHost *:80>
-    ServerName example.com  # Замените на доменное имя или IP-адрес сервера
+    # Замените на доменное имя или ip-адрес сервера
+    ServerName example.com
 
-    DocumentRoot /var/www/example.com/html  # Путь к собранным файлам фронтенда
+    # Путь к собранным файлам фронтенда
+    DocumentRoot /opt/oper.reag/frontend
 
-    <Directory /var/www/example.com/html> # Не пропускаем
+    # Настройки для директории с фронтендом
+    <Directory /opt/oper.reag/frontend>
         Options Indexes FollowSymLinks
         AllowOverride All
         Require all granted
+
+        # Перенаправление всех запросов на index.html, кроме существующих файлов
+        RewriteEngine On
+        RewriteBase /
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule ^ index.html [L]
     </Directory>
+
+    # Включение кэширования для статического контента
+    <IfModule mod_expires.c>
+        ExpiresActive On
+        ExpiresByType text/css "access plus 1 week"
+        ExpiresByType application/javascript "access plus 1 week"
+        ExpiresByType image/jpg "access plus 1 month"
+        ExpiresByType image/jpeg "access plus 1 month"
+        ExpiresByType image/png "access plus 1 month"
+        ExpiresByType image/gif "access plus 1 month"
+    </IfModule>
+
+    # Проксирование на бэкенд
 </VirtualHost>
 EOL
 ```
@@ -155,16 +229,14 @@ sudo firewall-cmd --reload
 На этом первичная конфигурация apache завершена. Результат можно проверить выполнив команду
 
 ```bash
-echo "$(hostname -I | awk '{print $1}')"
-
-curl http://ip-адрес сервера
+echo "curl http://$(hostname -I | awk '{print $1}')"
 ```
 
 Или открыть адрес в браузере.
 
-### Установка и настройка Asterisk
+#### Установка и настройка Asterisk
 
-Установим зависимости
+Установим необходимые зависимости
 
 ```bash
 yum install -y epel-release chkconfig libedit-devel
@@ -206,7 +278,7 @@ contrib/scripts/install_prereq install
 
 После успешного завершения настройки программного обеспечения мы увидим логотип системы в виде звездочки. Невозможно не заметить.
 
-### Компиляция и установка
+#### Компиляция и установка
 
 Теперь мы можем просто выполнить команду make без параметров и скомпилировать программу. Этот и следующий процесс могут занять несколько минут.
 
@@ -291,7 +363,7 @@ echo "$(openssl rand -base64 16)"
 Затем нам необходимо включить модуль AMI
 
 ```bash
-sed -i 's/^;enabled = no/enabled = yes/' "/etc/asterisk/manager.conf"
+sed -i "s^enabled =.*^enabled = yes^" /etc/asterisk/manager.conf
 ```
 
 ```bash
@@ -303,10 +375,10 @@ write = all
 ```
 
 ```bash
-sed -i 's/^secret = secret/secret = сгенерированный-пароль/' "/etc/asterisk/manager.conf"
+sed -i "s^secret =.*^secret = сгенерированный_пароль^" /etc/asterisk/manager.conf
 ```
 
-### Запуск Asterisk
+#### Запуск Asterisk
 
 Теперь вы можете добавить службу asterisk в автозагрузку, запустить её и проверить состояние.
 
@@ -316,9 +388,9 @@ systemctl start asterisk
 systemctl status asterisk
 ```
 
-### Установка и настройка PostgreSQL
+#### Установка и настройка PostgreSQL
 
-Подготовим исходники
+Подготовим исходники и переопределим пакеты
 
 ```bash
 yum install -y "https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
@@ -336,7 +408,7 @@ yum -qy module disable postgresql
 yum install -y postgresql16-server postgresql16
 ```
 
-### Настройка PostgreSQL
+#### Настройка PostgreSQL
 
 Первым делом нам нужно инициализировать базу данных. Выполняем в терминале
 
@@ -353,7 +425,7 @@ systemctl enable postgresql-16.service --now
 Теперь нам необходимо разрешить сервису слушать адреса
 
 ```bash
-sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" /var/lib/pgsql/16/data/postgresql.conf
+sed -i "s^#listen_addresses = 'localhost'^listen_addresses = '*'^" /var/lib/pgsql/16/data/postgresql.conf
 ```
 
 И добавляем новый хост для pgAdmin. Вы можете заменить 127.0.0.1 на IP-адрес вашей удаленной машины (если он статический, в противном случае периодически менять) или указать all что не совсем безопасно.
@@ -381,7 +453,7 @@ systemctl restart postgresql-16.service
 
 На этом установка и настройка PostgreSQL завершена. Вы можете подключиться к базе данных например через pgAdmin.
 
-### Установка и настройка ffmpeg
+#### Установка и настройка ffmpeg
 
 ffmpeg очень мощный инструмент для работы с потоковым видео. В нашем проекте он используется для работы с rtsp-потоком камеры. Давайте установим его.
 
@@ -405,7 +477,7 @@ cd ffmpeg-7.1
 ./configure --disable-x86asm
 ```
 
-### Компиляция и установка
+#### Компиляция и установка
 
 Теперь мы можем просто выполнить команду make без параметров и скомпилировать программу. Этот и следующий процесс могут занять около 15 минут.
 
@@ -423,7 +495,7 @@ ffmpeg
 
 На этом установка и настройка ffmpeg закончена
 
-### Установка и настройка основного бэкенд сервиса
+#### Установка и настройка основного бэкенд сервиса
 
 Ранее мы с вами установили и настроили веб-сервер который отдает нам фронтенд нашего приложения. Но фронтенд не может работать без установленного и настроеного бэкенда. Давайте скачаем его и настроим.
 
@@ -442,20 +514,24 @@ git clone https://github.com/example/oper.reag.git /opt/oper.reag
 ```bash
 cat <<EOL >/etc/systemd/system/backend.service
 [Unit]
-Description=Backend service
-After=network.target
+Description=Oper.reag backend daemon.
+Wants=network-online.target
+After=network-online.target network.target
 
 [Service]
+Type=simple
 EnvironmentFile=/opt/oper.reag/backend/env.sh
-ExecStart=/bin/bash -c 'source /opt/oper.reag/backend/env.sh && /opt/oper.reag/backend/bin/backend'
 WorkingDirectory=/opt/oper.reag/backend
+ExecStart=/bin/bash -c 'source /opt/oper.reag/backend/env.sh && /opt/oper.reag/backend/bin/backend'
 User=root
-Group=wheel
-Restart=always
-RestartSec=5
+Group=root
 StandardOutput=append:/opt/oper.reag/backend/log/backend.log
 StandardError=append:/opt/oper.reag/backend/log/backend-error.log
 SyslogIdentifier=backend
+
+LimitCORE=infinity
+Restart=always
+RestartSec=4
 
 [Install]
 WantedBy=multi-user.target
@@ -465,8 +541,11 @@ EOL
 После чего выставим необходимые права для файла с окружением и бинарником
 
 ```bash
-chmod +x /opt/oper.reag/backend/env.sh
-chmod +x /opt/oper.reag/backend/bin/backend
+    chmod 600 /opt/oper.reag/backend/env.sh
+    chown root:root /opt/oper.reag/backend/env.sh
+
+    chmod 700 /opt/oper.reag/backend/bin/backend
+    chown root:root /opt/oper.reag/backend/bin/backend
 ```
 
 Теперь перезапустим системные службы и добавим наш сервис в автозапуск
@@ -479,25 +558,17 @@ systemctl enable backend.service --now
 
 Половина дела сделано. Нам осталось прокинуть проксирование запросов на наш сервис и поправить окружение.
 
-### Проксирование запросов
+#### Проксирование запросов
 
 Откроем конфигурационный файл нашего веб-сервера и добавим в него содержимое
 
-#### Если apache
+##### Если apache
 
 ```bash
 nano /etc/httpd/conf.d/example.conf
 
 <VirtualHost *:80>
-    ServerName example.com  # Замените на доменное имя или IP-адрес сервера
-
-    DocumentRoot /var/www/example.com/html  # Путь к собранным файлам фронтенда
-
-    <Directory /var/www/example.com/html> # Не пропускаем
-        Options Indexes FollowSymLinks
-        AllowOverride All
-        Require all granted
-    </Directory>
+    ...
 
     # Проксирование на бэкенд сервис
     ProxyPass /v1 http://localhost:9000
@@ -505,19 +576,13 @@ nano /etc/httpd/conf.d/example.conf
 </VirtualHost>
 ```
 
-#### Если nginx
+##### Если nginx
 
 ```bash
 nano /etc/nginx/conf.d/example.conf
 
 server {
-    listen 80;
-    server_name example.com;  # Замените на доменное имя или IP-адрес сервера
-
-    location / {
-        root /var/www/example.com/html;  # Путь к собранным файлам фронтенда
-        try_files \$uri \$uri/ /index.html;
-    }
+    ...
 
     # Проксирование на бэкенд сервис
     location /v1 {
@@ -533,7 +598,13 @@ server {
 Мы ранее с вами создавали пароль для нашего postgres пользователя. Давайте укажем его в нашем окружении
 
 ```bash
-sed -i "s|export DATABASE_URL=.*|export DATABASE_URL=\"postgres://postgres:наш-пароль-от-постгреса@localhost:5432/postgres?sslmode=disable\"|" /opt/oper.reag/backend/env.sh
+sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:наш_пароль@localhost:5432/postgres?sslmode=disable\"^" /opt/oper.reag/backend/env.sh
+```
+
+Мы ранее с вами создавали пароль для нашего AMI пользователя. Давайте укажем его в нашем окружении
+
+```bash
+sed -i "s^export AMI_PASS=.*^export AMI_PASS=\"наш_пароль\"^" /opt/oper.reag/backend/env.sh
 ```
 
 Нам осталось только запустить его
@@ -545,132 +616,7 @@ systemctl status backend.service
 
 На этом настройка основного бэкенд сервиса закончена.
 
-### Установка и настройка AMI сервиса
-
-Мы с вами установили веб-сервер, основной бэкенд, но для полной картины нам нехвтает еще одного сервиса, который отвечает за работу ffmpeg, видеокамер и нашего фронтенда.
-
-Мы ранее уже копировали репозиторий и у нас появилась еще одна директория /opt/oper.reag/backend-ami
-Создадим системную службу для нашего сервиса
-
-```bash
-cat <<EOL >/etc/systemd/system/backend-ami.service
-[Unit]
-Description=Backend AMI service
-After=network.target
-
-[Service]
-EnvironmentFile=/opt/oper.reag/backend-ami/env.sh
-ExecStart=/bin/bash -c 'source /opt/oper.reag/backend-ami/env.sh && /opt/oper.reag/backend-ami/bin/backend-ami'
-WorkingDirectory=/opt/oper.reag/backend-ami
-User=root
-Group=wheel
-Restart=always
-RestartSec=5
-StandardOutput=append:/opt/oper.reag/backend-ami/log/backend-ami.log
-StandardError=append:/opt/oper.reag/backend-ami/log/backend-ami-error.log
-SyslogIdentifier=backend-ami
-
-[Install]
-WantedBy=multi-user.target
-EOL
-```
-
-После чего выставим необходимые права для файла с окружением и бинарником
-
-```bash
-chmod +x /opt/oper.reag/backend-ami/env.sh
-chmod +x /opt/oper.reag/backend-ami/bin/backend-ami
-```
-
-Теперь перезапустим системные службы и добавим наш сервис в автозапуск
-
-```bash
-systemctl daemon-reload
-
-systemctl enable backend-ami.service --now
-```
-
-Половина дела сделано. Нам осталось прокинуть проксирование запросов на наш сервис и поправить окружение.
-
-### Проксирование запросов
-
-Откроем конфигурационный файл нашего веб-сервера и добавим в него содержимое
-
-#### Если apache
-
-```bash
-nano /etc/httpd/conf.d/example.conf
-
-<VirtualHost *:80>
-    ServerName example.com  # Замените на доменное имя или IP-адрес сервера
-
-    DocumentRoot /var/www/example.com/html  # Путь к собранным файлам фронтенда
-
-    <Directory /var/www/example.com/html> # Не пропускаем
-        Options Indexes FollowSymLinks
-        AllowOverride All
-        Require all granted
-    </Directory>
-
-    # Проксирование на бэкенд сервис
-    ProxyPass /v1 http://localhost:9000
-    ProxyPassReverse /v1 http://localhost:9000
-
-    # Проксирование на AMI сервис
-    ProxyPass /ami http://localhost:9002
-    ProxyPassReverse /ami http://localhost:9002
-</VirtualHost>
-```
-
-#### Если nginx
-
-```bash
-nano /etc/nginx/conf.d/example.conf
-
-server {
-    listen 80;
-    server_name example.com;  # Замените на доменное имя или IP-адрес сервера
-
-    location / {
-        root /var/www/example.com/html;  # Путь к собранным файлам фронтенда
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    # Проксирование на бэкенд сервис
-    location /v1 {
-        proxy_pass http://localhost:9000;  # Проксирование на бэкенд
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-    # Проксирование на AMI сервис
-    location /ami {
-        proxy_pass http://localhost:9002;  # Проксирование на сервис AMI
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-```
-
-Мы ранее с вами создавали пароль для нашего AMI пользователя. Давайте укажем его в нашем окружении
-
-```bash
-sed -i "s|export SECRET=.*|export SECRET=\"наш-секретный-пароль\"|" /opt/oper.reag/backend-ami/env.sh
-```
-
-Нам осталось только запустить его
-
-```bash
-systemctl start backend-ami.service
-systemctl status backend-ami.service
-```
-
-На этом настройка AMI сервиса закончена.
-
-### Миграции
+#### Миграции
 
 Файлы миграции расположены в /opt/oper.reag/backend/migrations
 
@@ -689,7 +635,7 @@ done
 
 Если все прошло успешно, вы увидите новые таблицы в pgAdmin
 
-### Заключение
+#### Заключение
 
 Мы настроили с вами веб-сервер, настроили Asterisk, подключили базу данных PostgreSQL, скачали и настроили сервисы в т.ч ffmpeg.
 Перезапустим все.
