@@ -117,6 +117,24 @@ os_install() {
     done
 }
 
+# Функция экранирования всех специальных символов
+os_urlencode() {
+    local string="${1}"
+    local strlen=${#string}
+    local encoded=""
+    local pos c o
+
+    for ((pos = 0; pos < strlen; pos++)); do
+        c=${string:$pos:1}
+        case "$c" in
+        [-_.~a-zA-Z0-9]) o="${c}" ;;
+        *) printf -v o '%%%02x' "'$c" ;;
+        esac
+        encoded+="${o}"
+    done
+    echo "${encoded}"
+}
+
 # Выбор действия
 # Параметры:
 #   $1: Строка с сообщением для пользователя.
@@ -583,7 +601,7 @@ setup_backend_server() {
 
     echo ""
     echo "Обновляем переменные окружения..."
-    sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:$SE_PASS_POSTGRES@localhost:5432/postgres?sslmode=disable\"^" $SE_SOURCE/backend/env.sh
+    sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:$(urlencode "$SE_PASS_POSTGRES")@localhost:5432/postgres?sslmode=disable\"^" $SE_SOURCE/backend/env.sh
 
     sed -i "s^export AMI_PASS=.*^export AMI_PASS=\"$SE_PASS_AMI\"^" $SE_SOURCE/backend/env.sh
 
