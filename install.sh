@@ -253,7 +253,7 @@ setup_apache_cfg() {
     echo ""
     echo "*------------------------------------------------------*"
     echo ""
-    echo "Интерфейс доступен по адресу: \e[38;5;111mhttp://$SE_HOST/\e[0m"
+    echo -e "Интерфейс доступен по адресу: \e[38;5;111mhttp://$SE_HOST/\e[0m"
     echo ""
     echo "*------------------------------------------------------*"
 }
@@ -322,7 +322,7 @@ setup_nginx_cfg() {
     echo ""
     echo "*------------------------------------------------------*"
     echo ""
-    echo "Интерфейс доступен по адресу: \e[38;5;111mhttp://$SE_HOST/\e[0m"
+    echo -e "Интерфейс доступен по адресу: \e[38;5;111mhttp://$SE_HOST/\e[0m"
     echo ""
     echo "*------------------------------------------------------*"
 }
@@ -575,7 +575,7 @@ setup_backend_server() {
 
     sed -i "s^WorkingDirectory=.*^WorkingDirectory=$SE_SOURCE/backend^" /etc/systemd/system/backend.service
 
-    sed -i "s^ExecStart=.*^ExecStart=/bin/bash -c 'source $SE_SOURCE/backend/env.sh && $SE_SOURCE/backend/bin/backend'^" /etc/systemd/system/backend.service
+    sed -i "s^ExecStart=.*^ExecStart=/bin/bash -c 'source $SE_SOURCE/backend/env.sh \&\& $SE_SOURCE/backend/bin/backend'^" /etc/systemd/system/backend.service
 
     sed -i "s^StandardOutput=.*^StandardOutput=append:$SE_SOURCE/backend/log/backend.log^" /etc/systemd/system/backend.service
 
@@ -611,38 +611,6 @@ setup_backend_server() {
 
     echo ""
     echo "Служба backend.service успешно создана и запущена."
-}
-
-# Установка видео-сервера
-install_hls_server() {
-    os_select "Установить видео-сервер?" "Да" "Нет"
-    case $? in
-    1)
-        yum groupinstall -y "Development Tools"
-
-        echo ""
-        echo "Загружаем исходники..."
-        wget https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
-
-        tar -xvf ffmpeg-7.1.tar.xz
-
-        cd ffmpeg-7.1
-
-        echo ""
-        echo "Конфигурируем ffmpeg..."
-        ./configure --disable-x86asm
-
-        make
-
-        echo ""
-        echo "Устанавливаем..."
-        sudo make install
-        ;;
-    2)
-        echo ""
-        echo "Продолжаем без видео-сервера..."
-        ;;
-    esac
 }
 
 # Установка и минимальная конфигурация VOIP
@@ -744,6 +712,38 @@ install_voip_server() {
     esac
 }
 
+# Установка видео-сервера
+install_hls_server() {
+    os_select "Установить видео-сервер?" "Да" "Нет"
+    case $? in
+    1)
+        yum groupinstall -y "Development Tools"
+
+        echo ""
+        echo "Загружаем исходники..."
+        wget https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+
+        tar -xvf ffmpeg-7.1.tar.xz
+
+        cd ffmpeg-7.1
+
+        echo ""
+        echo "Конфигурируем ffmpeg..."
+        ./configure --disable-x86asm
+
+        make
+
+        echo ""
+        echo "Устанавливаем..."
+        sudo make install
+        ;;
+    2)
+        echo ""
+        echo "Продолжаем без видео-сервера..."
+        ;;
+    esac
+}
+
 # Основной сценарий
 main() {
     # Запрос на обновление системных компонентов
@@ -758,11 +758,11 @@ main() {
     # Запрос на минимальную конфигурацию бэкенд сервера
     setup_backend_server
 
-    # Запрос на установку видео-сервера
-    install_hls_server
-
     # Запрос на установку и минимальную конфигурацию VOIP
     install_voip_server
+
+    # Запрос на установку видео-сервера
+    install_hls_server
 
     echo ""
     echo "Установка завершена."
