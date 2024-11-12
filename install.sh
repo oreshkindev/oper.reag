@@ -327,11 +327,6 @@ setup_nginx_cfg() {
     fi
 
     echo ""
-    echo "Включаем firewall..."
-    sudo systemctl start firewalld
-    sudo systemctl enable firewalld
-
-    echo ""
     echo "Открываем порт :80"
     if ! sudo firewall-cmd --list-services | grep -q http; then
         if ! sudo firewall-cmd --permanent --add-service=http; then
@@ -472,7 +467,7 @@ setup_postgresql_cfg() {
     echo "Открываем адреса для прослушивания..."
     sed -i "s^#listen_addresses = 'localhost'^listen_addresses = '*'^" /var/lib/pgsql/16/data/postgresql.conf
 
-    echo "host    replication     all             $SE_HOST/32             md5" >>/var/lib/pgsql/16/data/pg_hba.conf
+    echo "host    all     all             $SE_HOST/32             md5" >>/var/lib/pgsql/16/data/pg_hba.conf
 
     echo ""
     echo "Устанавливаем пароль для пользователя postgres..."
@@ -578,67 +573,95 @@ install_database_service() {
 
 # Конфигурация бэкенд сервера
 setup_backend_server() {
-    echo ""
-    echo "Создание службы backend.service..."
-    # Проверяем наличие временного файла конфигурации
-    if [ -f "$SE_SOURCE/tmp/etc/systemd/system/backend.service" ]; then
-        # Копируем файл в директорию системных служб
-        cp "$SE_SOURCE/tmp/etc/systemd/system/backend.service" /etc/systemd/system/backend.service
-    else
+    os_select "Обновить конфигурацию бэкенд-сервера?" "Да" "Нет"
+    case $? in
+    1)
+        # Отключение SELinux
         echo ""
-        echo "Файл конфигурации $SE_SOURCE/tmp/etc/systemd/system/backend.service не найден."
-        exit 1
-    fi
+        echo "Отключаем SELinux..."
+        sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
 
-    # Выставляем необходимые права
-    chmod 600 $SE_SOURCE/backend/env.sh
-    chown root:root $SE_SOURCE/backend/env.sh
-
-    chmod 700 $SE_SOURCE/backend/bin/backend
-    chown root:root $SE_SOURCE/backend/bin/backend
-
-    echo ""
-    echo "Обновляем конфигурацию..."
-    sed -i "s^EnvironmentFile=.*^EnvironmentFile=$SE_SOURCE/backend/env.sh^" /etc/systemd/system/backend.service
-
-    sed -i "s^WorkingDirectory=.*^WorkingDirectory=$SE_SOURCE/backend^" /etc/systemd/system/backend.service
-
-    sed -i "s^ExecStart=.*^ExecStart=/bin/bash -c 'source $SE_SOURCE/backend/env.sh \&\& $SE_SOURCE/backend/bin/backend'^" /etc/systemd/system/backend.service
-
-    sed -i "s^StandardOutput=.*^StandardOutput=append:$SE_SOURCE/backend/log/backend.log^" /etc/systemd/system/backend.service
-
-    sed -i "s^StandardError=.*^StandardError=append:$SE_SOURCE/backend/log/backend-error.log^" /etc/systemd/system/backend.service
-
-    echo ""
-    echo "Обновляем переменные окружения..."
-    sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:$(urlencode "$SE_PASS_POSTGRES")@localhost:5432/postgres?sslmode=disable\"^" $SE_SOURCE/backend/env.sh
-
-    sed -i "s^export AMI_PASS=.*^export AMI_PASS=\"$SE_PASS_AMI\"^" $SE_SOURCE/backend/env.sh
-
-    sed -i "s^export MEDIA_PATH=.*^export MEDIA_PATH=\"$SE_SOURCE/frontend/in\"^" $SE_SOURCE/backend/env.sh
-
-    echo ""
-    echo "Применяем миграции..."
-    for M in $SE_SOURCE/backend/migrations/*.sql; do
-        sudo -u postgres psql -d postgres -f "$M"
-
-        if [ $? -ne 0 ]; then
+        echo ""
+        echo "Создание службы backend.service..."
+        # Проверяем наличие временного файла конфигурации
+        if [ -f "$SE_SOURCE/tmp/etc/systemd/system/backend.service" ]; then
+            # Копируем файл в директорию системных служб
+            cp "$SE_SOURCE/tmp/etc/systemd/system/backend.service" /etc/systemd/system/backend.service
+        else
             echo ""
-            print "Ошибка при выполнении миграции $M."
+            echo "Файл конфигурации $SE_SOURCE/tmp/etc/systemd/system/backend.service не найден."
             exit 1
         fi
-    done
 
-    echo ""
-    echo "Перезагрузка systemd для применения изменений..."
-    systemctl daemon-reload
+        # Выставляем необходимые права
+        chmod 600 $SE_SOURCE/backend/env.sh
+        chown root:root $SE_SOURCE/backend/env.sh
 
-    echo ""
-    echo "Включение и запуск службы backend.service..."
-    systemctl enable backend.service --now
+        chmod 700 $SE_SOURCE/backend/bin/backend
+        chown root:root $SE_SOURCE/backend/bin/backend
 
-    echo ""
-    echo "Служба backend.service успешно создана и запущена."
+        echo ""
+        echo "Обновляем конфигурацию..."
+        sed -i "s^EnvironmentFile=.*^EnvironmentFile=$SE_SOURCE/backend/env.sh^" /etc/systemd/system/backend.service
+
+        sed -i "s^WorkingDirectory=.*^WorkingDirectory=$SE_SOURCE/backend^" /etc/systemd/system/backend.service
+
+        sed -i "s^ExecStart=.*^ExecStart=/bin/bash -c 'source $SE_SOURCE/backend/env.sh \&\& $SE_SOURCE/backend/bin/backend'^" /etc/systemd/system/backend.service
+
+        sed -i "s^StandardOutput=.*^StandardOutput=append:$SE_SOURCE/backend/log/backend.log^" /etc/systemd/system/backend.service
+
+        sed -i "s^StandardError=.*^StandardError=append:$SE_SOURCE/backend/log/backend-error.log^" /etc/systemd/system/backend.service
+
+        echo ""
+        echo "Обновляем переменные окружения..."
+
+        sed -i "s^export DATABASE_URL=.*^export DATABASE_URL=\"postgres://postgres:$(os_urlencode "$SE_PASS_POSTGRES")@localhost:5432/postgres?sslmode=disable\"^" $SE_SOURCE/backend/env.sh
+
+        sed -i "s^export AMI_PASS=.*^export AMI_PASS=\"$SE_PASS_AMI\"^" $SE_SOURCE/backend/env.sh
+
+        sed -i "s^export MEDIA_PATH=.*^export MEDIA_PATH=\"$SE_SOURCE/frontend/in\"^" $SE_SOURCE/backend/env.sh
+
+        os_select "Выполнить миграции?" "Да" "Нет"
+        case $? in
+        1)
+
+            echo ""
+            echo "Применяем миграции..."
+            for M in $SE_SOURCE/backend/migrations/*.sql; do
+                sudo -u postgres psql -d postgres -f "$M"
+
+                if [ $? -ne 0 ]; then
+                    echo ""
+                    print "Ошибка при выполнении миграции $M."
+                    exit 1
+                fi
+            done
+            ;;
+        2)
+            echo ""
+            echo "Продолжаем без миграций..."
+            ;;
+        esac
+
+        echo ""
+        echo "Перезагрузка systemd для применения изменений..."
+        systemctl daemon-reload
+
+        echo "Перезапуск службы postgresql-16..."
+        systemctl restart backend.service
+
+        echo ""
+        echo "Включение и запуск службы backend.service..."
+        systemctl enable backend.service --now
+
+        echo ""
+        echo "Служба backend.service успешно создана и запущена."
+        ;;
+    2)
+        echo ""
+        echo "Продолжаем без обновления конфигурации..."
+        ;;
+    esac
 }
 
 # Установка и минимальная конфигурация VOIP
@@ -776,6 +799,12 @@ install_hls_server() {
 main() {
     # Запрос на обновление системных компонентов
     os_update
+
+    # Применение изменений
+    setenforce 0
+
+    sudo systemctl start firewalld
+    sudo systemctl enable firewalld
 
     # Запрос на установку и минимальную конфигурацию веб-сервера
     install_http_server
