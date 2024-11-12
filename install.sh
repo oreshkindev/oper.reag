@@ -253,6 +253,11 @@ setup_apache_cfg() {
     fi
 
     echo ""
+    echo "Включаем firewall..."
+    sudo systemctl start firewalld
+    sudo systemctl enable firewalld
+
+    echo ""
     echo "Открываем порт :80"
     if ! sudo firewall-cmd --list-services | grep -q http; then
         if ! sudo firewall-cmd --permanent --add-service=http; then
@@ -320,6 +325,11 @@ setup_nginx_cfg() {
         echo "Ошибка в конфигурации nginx. Пожалуйста, проверьте файл /etc/nginx/conf.d/example.conf"
         exit 1
     fi
+
+    echo ""
+    echo "Включаем firewall..."
+    sudo systemctl start firewalld
+    sudo systemctl enable firewalld
 
     echo ""
     echo "Открываем порт :80"
@@ -503,10 +513,10 @@ install_database_service() {
         os_select "Выберите действие" "Postgresql"
         case $? in
         1)
+            yum clean all
             echo ""
             echo "Устанавливаем postgresql"
-            os_install "https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
-
+            os_install "https://download.postgresql.org/pub/repos/yum/reporpms/EL-8-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
             echo ""
             echo "Отключаем встроенный модуль"
             yum -qy module disable postgresql
